@@ -97,9 +97,9 @@ Each interaction ( e \in $$\mathcal{E}_S(t) ) has:
 
 Recent events count more:
 
-[
-$$ w_e = e^{-\lambda \Delta t_e} $$
-]
+$$
+ w_e = e^{-\lambda \Delta t_e}
+$$
 
 where $$ \lambda $$ controls decay aggressiveness.
 
@@ -107,11 +107,11 @@ where $$ \lambda $$ controls decay aggressiveness.
 
 ### Reputation Score
 
-[
+$$
 \text{Reputation}(S, t) =
-\frac{\sum_{e \in \mathcal{E}*S(t)} w_e \cdot q_e}
-{\sum*{e \in \mathcal{E}_S(t)} w_e}
-]
+\frac{\sum_{e \in \mathcal{E}_S(t)} w_e \cdot q_e}
+{\sum_{e \in \mathcal{E}_S(t)} w_e}
+$$
 
 Properties:
 
@@ -125,9 +125,9 @@ Properties:
 
 To avoid over-trusting sparse sources, apply a confidence term:
 
-[
+$$
 \text{FinalScore}(S) = \text{Reputation}(S) \cdot \left(1 - e^{-k|\mathcal{E}_S|}\right)
-]
+$$
 
 This ensures:
 
@@ -176,13 +176,13 @@ The MCP client maps goals to **policy weights**:
 
 The base reputation score is reweighted:
 
-[
+$$
 \text{PolicyScore}(S) =
 \alpha \cdot \text{Reputation}(S)
 
 * \beta \cdot \text{Accuracy}(S)
 * \gamma \cdot (1 - \text{Latency}(S))
-  ]
+$$
 
 Where ( \alpha, \beta, \gamma ) are **derived from agent goals**, not hardcoded.
 
