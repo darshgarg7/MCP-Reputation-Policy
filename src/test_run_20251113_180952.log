@@ -1,0 +1,156 @@
+--- Test Run Started: 2025-11-13 18:09:52.834270 ---
+Policy Threshold: 0.7
+Decay Half-Life: 24 hours
+
+
+--- Running Test Case 1: T1_Baseline_High_Reliability ---
+
+--- 🚀 Client Task: Default task (Tool: DATA_RETRIEVAL) ---
+   [LLM Policy] Recommendation: The best server is **data_server_2** (Score: 0.9500). It is highly cost-efficient and trustworthy.
+   ✅ **Policy SELECT**: Routing to **data_server_2** (Score: 0.9500, Cost: $0.001)
+   [Telemetry] Status: **SUCCESS** | Latency: 0.2722s | Cost: $0.1150
+   [Feedback] Satisfaction: 0.6686 (Derived)
+   [RepScore Update] data_server_2: Score updated from 0.9500 to **0.9249**
+
+--- 🚀 Client Task: Default task (Tool: DATA_RETRIEVAL) ---
+   [LLM Policy] Recommendation: The best server is **data_server_2** (Score: 0.9249). It is highly cost-efficient and trustworthy.
+   ✅ **Policy SELECT**: Routing to **data_server_2** (Score: 0.9249, Cost: $0.001)
+   [Telemetry] Status: **SUCCESS** | Latency: 0.1681s | Cost: $0.1300
+   [Feedback] Satisfaction: 0.8324 (Derived)
+   [RepScore Update] data_server_2: Score updated from 0.9249 to **0.9115**
+
+--- Verification for T1_Baseline_High_Reliability ---
+Final Score (data_server_2): 0.9115
+[PASS] Policy Block: Policy behaved as expected (No unexpected block).
+[FAIL] Score Assert: Final score (0.9115) below min target (0.9300).
+Notes: Verifies reliable server maintains high score and is never blocked.
+------------------------------------------------------------
+
+--- Running Test Case 2: T2_Initial_Policy_Block ---
+
+--- 🚀 Client Task: Default task (Tool: MATH_COMPUTE) ---
+   [LLM Policy] Recommendation: The best server is **compute_server_1** (Score: 0.8500). It meets reliability thresholds but has an average cost profile.
+   ✅ **Policy SELECT**: Routing to **compute_server_1** (Score: 0.8500, Cost: $0.005)
+   [Telemetry] Status: **SUCCESS** | Latency: 0.2508s | Cost: $0.5350
+   [Feedback] Satisfaction: 0.7131 (Derived)
+   [RepScore Update] compute_server_1: Score updated from 0.8500 to **0.8373**
+[FAIL] Block expected at Run 1, but did not occur.
+
+--- Verification for T2_Initial_Policy_Block ---
+Final Score (low_score_server_3): 0.5000
+[PASS] Policy Block: Policy behaved as expected (No unexpected block).
+Notes: Verifies unverified server (low_score_server_3 @ 0.50) is blocked immediately.
+------------------------------------------------------------
+[SETUP] Applied changes to compute_server_1
+
+--- Running Test Case 3: T3_Extreme_Latency_Penalty ---
+
+--- 🚀 Client Task: Test latency penalty in isolation (should severely drop satisfaction). (Tool: MATH_COMPUTE) ---
+   [LLM Policy] Recommendation: The best server is **compute_server_1** (Score: 0.8500). It meets reliability thresholds but has an average cost profile.
+   ✅ **Policy SELECT**: Routing to **compute_server_1** (Score: 0.8500, Cost: $0.005)
+   [Telemetry] Status: **SUCCESS** | Latency: 1.4552s | Cost: $0.3050
+   [Feedback] Satisfaction: 0.5916 (Derived)
+   [RepScore Update] compute_server_1: Score updated from 0.8500 to **0.8187**
+
+--- 🚀 Client Task: Test latency penalty in isolation (should severely drop satisfaction). (Tool: MATH_COMPUTE) ---
+   [LLM Policy] Recommendation: The best server is **compute_server_1** (Score: 0.8187). It meets reliability thresholds but has an average cost profile.
+   ✅ **Policy SELECT**: Routing to **compute_server_1** (Score: 0.8187, Cost: $0.005)
+   [Telemetry] Status: **SUCCESS** | Latency: 1.4600s | Cost: $0.3800
+   [Feedback] Satisfaction: 0.5875 (Derived)
+   [RepScore Update] compute_server_1: Score updated from 0.8187 to **0.7903**
+
+--- Verification for T3_Extreme_Latency_Penalty ---
+Final Score (compute_server_1): 0.7903
+[PASS] Policy Block: Policy behaved as expected (No unexpected block).
+[FAIL] Score Assert: Final score (0.7903) above max target (0.7800).
+Notes: Verifies that extreme latency successfully penalizes the score, even on success.
+------------------------------------------------------------
+[SETUP] Applied changes to compute_server_1
+
+--- Running Test Case 4: T4_Deterioration_Failover_Threshold ---
+
+--- 🚀 Client Task: Stress test compute until policy block threshold is crossed. (Tool: MATH_COMPUTE) ---
+   [LLM Policy] Recommendation: The best server is **compute_server_1** (Score: 0.8500). It meets reliability thresholds but has an average cost profile.
+   ✅ **Policy SELECT**: Routing to **compute_server_1** (Score: 0.8500, Cost: $0.005)
+   [Telemetry] Status: **ERROR** | Latency: 0.7431s | Cost: $0.2850
+   [Feedback] Satisfaction: 0.1000 (Derived)
+   [RepScore Update] compute_server_1: Score updated from 0.8500 to **0.7704**
+
+--- 🚀 Client Task: Stress test compute until policy block threshold is crossed. (Tool: MATH_COMPUTE) ---
+   [LLM Policy] Recommendation: The best server is **compute_server_1** (Score: 0.7704). It meets reliability thresholds but has an average cost profile.
+   ✅ **Policy SELECT**: Routing to **compute_server_1** (Score: 0.7704, Cost: $0.005)
+   [Telemetry] Status: **SUCCESS** | Latency: 0.6841s | Cost: $0.6550
+   [Feedback] Satisfaction: 0.5825 (Derived)
+   [RepScore Update] compute_server_1: Score updated from 0.7704 to **0.7496**
+
+--- 🚀 Client Task: Stress test compute until policy block threshold is crossed. (Tool: MATH_COMPUTE) ---
+   [LLM Policy] Recommendation: The best server is **compute_server_1** (Score: 0.7496). It meets reliability thresholds but has an average cost profile.
+   ✅ **Policy SELECT**: Routing to **compute_server_1** (Score: 0.7496, Cost: $0.005)
+   [Telemetry] Status: **SUCCESS** | Latency: 0.7561s | Cost: $0.3350
+   [Feedback] Satisfaction: 0.5837 (Derived)
+   [RepScore Update] compute_server_1: Score updated from 0.7496 to **0.7291**
+[FAIL] Block expected at Run 3, but did not occur.
+
+--- 🚀 Client Task: Stress test compute until policy block threshold is crossed. (Tool: MATH_COMPUTE) ---
+   [LLM Policy] Recommendation: The best server is **compute_server_1** (Score: 0.7291). It meets reliability thresholds but has an average cost profile.
+   ✅ **Policy SELECT**: Routing to **compute_server_1** (Score: 0.7291, Cost: $0.005)
+   [Telemetry] Status: **ERROR** | Latency: 0.8084s | Cost: $0.3250
+   [Feedback] Satisfaction: 0.1000 (Derived)
+   [RepScore Update] compute_server_1: Score updated from 0.7291 to **0.6602**
+
+--- 🚀 Client Task: Stress test compute until policy block threshold is crossed. (Tool: MATH_COMPUTE) ---
+   [LLM Policy] Recommendation: The best server is **compute_server_1** (Score: 0.6602). WARNING: Reputation is too low; execution will be blocked.
+   ❌ **Policy BLOCK**: All servers failed minimum reputation check.
+
+--- 🚀 Client Task: Stress test compute until policy block threshold is crossed. (Tool: MATH_COMPUTE) ---
+   [LLM Policy] Recommendation: The best server is **compute_server_1** (Score: 0.6602). WARNING: Reputation is too low; execution will be blocked.
+   ❌ **Policy BLOCK**: All servers failed minimum reputation check.
+
+--- Verification for T4_Deterioration_Failover_Threshold ---
+Final Score (compute_server_1): 0.6602
+[PASS] Policy Block: Policy behaved as expected (No unexpected block).
+Notes: Verifies score drops below threshold and the client blocks execution.
+------------------------------------------------------------
+[SETUP] Simulating 24 hours of inactivity...
+[INFO] Timestamps advanced for decay check.
+
+--- Running Test Case 5: T5_Decay_Half_Life_Verification ---
+
+--- 🚀 Client Task: Check reputation after simulated inactivity. (Tool: DATA_RETRIEVAL) ---
+   [DECAY WARNING] data_server_2: Score decayed from 0.9500 to 0.7250.
+   [LLM Policy] Recommendation: The best server is **data_server_2** (Score: 0.7250). It is highly cost-efficient and trustworthy.
+   ✅ **Policy SELECT**: Routing to **data_server_2** (Score: 0.7250, Cost: $0.001)
+   [Telemetry] Status: **SUCCESS** | Latency: 0.2232s | Cost: $0.1370
+   [Feedback] Satisfaction: 0.7511 (Derived)
+   [RepScore Update] data_server_2: Score updated from 0.7250 to **0.7270**
+
+--- Verification for T5_Decay_Half_Life_Verification ---
+Final Score (data_server_2): 0.7270
+[PASS] Policy Block: Policy behaved as expected (No unexpected block).
+[PASS] Decay Assert: Score 0.7270 matched expected decay target 0.7250.
+Notes: Verifies the decay mechanism correctly drops the score halfway to the default 0.50.
+------------------------------------------------------------
+[SETUP] Applied changes to data_server_2
+
+--- Running Test Case 6: T6_Relative_Cost_Edge_Case ---
+
+--- 🚀 Client Task: Test max reward for zero cost/max penalty for high cost. (Tool: DATA_RETRIEVAL) ---
+   [LLM Policy] Recommendation: The best server is **data_server_2** (Score: 0.9500). It is highly cost-efficient and trustworthy.
+   ✅ **Policy SELECT**: Routing to **data_server_2** (Score: 0.9500, Cost: $0.001)
+   [Telemetry] Status: **SUCCESS** | Latency: 0.0219s | Cost: $0.0073
+   [Feedback] Satisfaction: 1.0585 (Derived)
+   [RepScore Update] data_server_2: Score updated from 0.9500 to **0.9468**
+
+--- 🚀 Client Task: Test max reward for zero cost/max penalty for high cost. (Tool: DATA_RETRIEVAL) ---
+   [LLM Policy] Recommendation: The best server is **data_server_2** (Score: 0.9468). It is highly cost-efficient and trustworthy.
+   ✅ **Policy SELECT**: Routing to **data_server_2** (Score: 0.9468, Cost: $0.001)
+   [Telemetry] Status: **SUCCESS** | Latency: 0.1254s | Cost: $0.0075
+   [Feedback] Satisfaction: 0.8942 (Derived)
+   [RepScore Update] data_server_2: Score updated from 0.9468 to **0.9348**
+
+--- Verification for T6_Relative_Cost_Edge_Case ---
+Final Score (data_server_2): 0.9348
+[PASS] Policy Block: Policy behaved as expected (No unexpected block).
+[FAIL] Score Assert: Final score (0.9348) below min target (0.9600).
+Notes: Verifies the relative cost factor (F_C) grants maximum reward for ultra-low cost.
+------------------------------------------------------------
