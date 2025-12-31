@@ -176,15 +176,9 @@ The MCP client maps goals to **policy weights**:
 
 The base reputation score is reweighted:
 
-$$
-\text{PolicyScore}(S) =
-\alpha \cdot \text{Reputation}(S)
+$$\text{PolicyScore}(S) = \alpha \cdot \text{Reputation}(S) + \beta \cdot \text{Accuracy}(S) + \gamma \cdot (1 - \text{Latency}(S))$$
 
-* \beta \cdot \text{Accuracy}(S)
-* \gamma \cdot (1 - \text{Latency}(S))
-$$
-
-Where ( \alpha, \beta, \gamma ) are **derived from agent goals**, not hardcoded.
+Where $\alpha, \beta, \gamma$ are derived from agent goals, not hardcoded.
 
 ---
 
