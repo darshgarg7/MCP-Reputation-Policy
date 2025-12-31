@@ -86,7 +86,7 @@ Let:
 * ( S ) = a data source
 * ( t ) = current time
 * ( W ) = rolling window duration
-* ( \mathcal{E}_S(t) ) = set of interactions from source ( S ) in ( [t - W, t] )
+* $$\mathcal{E}_S(t) = \{ \text{interactions from source } S \text{ in } [t - W, t] \}$$
 
 Each interaction ( e \in \mathcal{E}_S(t) ) has:
 
