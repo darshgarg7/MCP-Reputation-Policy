@@ -215,4 +215,6 @@ This system:
 
 It turns MCP into a **reputation-aware, goal-aligned orchestration layer**
 
+## 9. Run Instructions
+
 To run, clone the repo and cd into src. Then, run the command: python3 mcp.py  :)
