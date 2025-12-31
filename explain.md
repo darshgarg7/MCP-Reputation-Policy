@@ -267,3 +267,64 @@ This architecture demonstrates how decentralized AI ecosystems could self-regula
 
 - **Policy-layer Observability**  
   Reputation and routing decisions are explainable and auditable.
+
+---
+
+## 11. Reputation Policy Integration with MCP Authentication Layers
+
+Traditional security models are **binary**. A server is either authenticated or it is not. Once a tool server presents valid credentials, it is implicitly trusted until those credentials expire or are manually revoked. This approach works well for identity verification, but it fails to capture whether a system remains *useful* or *safe* over time.
+
+A Reputation Policy Layer (RPL) introduces a **continuous trust signal**. Instead of treating trust as a yes-or-no decision, reputation is modeled as a **scalar value** that evolves based on observed behavior and performance.
+
+### Authentication vs. Reputation
+
+| Feature | Authentication (AuthN / AuthZ) | Reputation Policy Layer (RPL) |
+|------|-------------------------------|-------------------------------|
+| **Logic** | Binary (Allow / Deny) | Gradient (0.0 → 1.0) |
+| **Primary Question** | Who are you? | How good are you *right now*? |
+| **Failure Handling** | Hard failures (invalid keys, expired tokens) | Soft failures (latency, hallucinations, drift) |
+| **Adaptability** | Static until manual revocation | Dynamic with temporal decay |
+| **Scope** | Identity and permissions | Output quality and reliability |
+
+---
+
+### Learning from Industry “Soft Failures”
+
+Recent incidents show why identity alone is insufficient. These were not always traditional security breaches. Instead, they were **quality and reliability failures** that occurred inside fully authenticated systems.
+
+#### Audit and Advisory Failures (e.g., Big Four–style contexts)
+
+In complex financial or government data integrations, pipelines often remain fully authenticated while gradually drifting in data quality. Because the source identity is still valid, systems continue ingesting low-quality or misleading data.
+
+Without a reputation layer tracking metrics like `relevance_score` or `success_rate`, the system has no mechanism to detect or respond to this degradation. The result is secure ingestion of increasingly useless context.
+
+#### Large-Scale Service Outages (e.g., CrowdStrike-style incidents)
+
+During major operational incidents, many services remain authenticated but become functionally unusable. Latency spikes, error rates surge, and responses become corrupted.
+
+A Reputation Policy Layer would detect these signals in real time, automatically **circuit-breaking** degraded servers and rerouting agent requests to healthier alternatives before human operators even notice.
+
+---
+
+### Authentication Cannot Stop a “Good” Source That Turns “Bad”
+
+Authentication only answers whether a source is allowed to connect. It cannot assess whether that source should continue to be trusted.
+
+#### Data Poisoning Scenario
+
+A data provider can present valid SSL certificates and OIDC tokens while serving adversarial, biased, or low-quality context. From an AuthN/AuthZ perspective, everything looks fine.
+
+#### RPL Defense Mechanism
+
+Because the RPL continuously tracks `relevance_score`, `quality_score`, and execution outcomes, any drop in output quality immediately impacts reputation. Through temporal decay, the system naturally deprioritizes or excludes the source.
+
+The agent stops using the server not because it is forbidden, but because it is no longer **reputable**.
+
+---
+
+### Complementary Security Model
+
+- **Authentication (AuthN/AuthZ)** protects the **pipe**  
+- **Reputation Policy Layer (RPL)** protects the **water inside the pipe**
+
+Even if the pipe is secure, the water can still be contaminated. The RPL ensures that AI agents only consume context from the cleanest, most reliable sources available at that specific moment in time.
