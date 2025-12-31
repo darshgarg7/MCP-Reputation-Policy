@@ -214,3 +214,5 @@ This system:
 * Scales across agents without centralized control logic
 
 It turns MCP into a **reputation-aware, goal-aligned orchestration layer**
+
+To run, clone the repo and cd into src. Then, run the command: python3 mcp.py  :)
