@@ -121,9 +121,9 @@ Properties:
 
 ---
 
-## 6. Confidence Adjustment (Optional but Useful)
+## 6. Confidence Adjustment
 
-To avoid over-trusting sparse sources, apply a confidence term:
+To avoid over-trusting sparse sources, applied a confidence term:
 
 $$
 \text{FinalScore}(S) = \text{Reputation}(S) \cdot \left(1 - e^{-k|\mathcal{E}_S|}\right)
