@@ -88,9 +88,9 @@ Let:
 * ( W ) = rolling window duration
 * $$\mathcal{E}_S(t) = \{ \text{interactions from source } S \text{ in } [t - W, t] \}$$
 
-Each interaction ( e \in $$\mathcal{E}_S(t) ) has:
+Each interaction $e \in \mathcal{E}_S(t)$ has:
 
-* ( q_e \in [0,1] ): quality score (success, relevance, correctness)
+* $q_e \in [0,1]$: quality score (success, relevance, correctness)
 * $$\Delta t_e = t - t_e $$: age of interaction
 
 ### Time Decay Weight
@@ -101,7 +101,7 @@ $$
  w_e = e^{-\lambda \Delta t_e}
 $$
 
-where $$ \lambda $$ controls decay aggressiveness.
+where $\lambda$ controls decay aggressiveness.
 
 ---
 
