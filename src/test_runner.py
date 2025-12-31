@@ -14,7 +14,7 @@ OUTPUT_DIR = "test_results"
 LOG_FILENAME = f"test_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 FLOAT_TOLERANCE = 0.005 # Tolerance for score assertions
 
-# --- Test Case Definitions (FAANG-Level Scenarios) ---
+# --- Test Case Definitions ---
 
 TEST_CASES = [
     {
