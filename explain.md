@@ -1,3 +1,25 @@
+sequenceDiagram
+    participant CLI as User/CLI
+    participant Client as MCP Client
+    participant RepService as RepScoreService
+    participant Server as MCP Server
+
+    CLI->>Client: Task Request (ToolType, Prompt)
+    Client->>RepService: discover_servers(ToolType)
+    RepService-->>Client: List of Servers + Live Rep Scores
+    
+    Note over Client: Selection Logic:<br/>1. Filter < Threshold (0.70)<br/>2. Sort by Best Score
+    
+    Client->>Server: execute_task()
+    Server-->>Client: Response (Latency, Success, Cost)
+    
+    Client->>RepService: submit_feedback(Telemetry)
+    Note over RepService: Update EMA Score &<br/>Apply Temporal Decay
+    
+    RepService-->>Client: Update Confirmed
+    Client-->>CLI: Display Result & Updated Audit Table
+
+
 This code defines a simulated ecosystem for a **Model Context Protocol (MCP)**, which connects AI agents (clients) to tool servers 
 (e.g., math computation, image generation, semantic search) using a **Reputation Policy Layer (RPL)**.
 
