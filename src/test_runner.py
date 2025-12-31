@@ -8,12 +8,12 @@ from config import ToolType, RepScoreConfig, ServerCatalog
 from repservice import RepScoreService
 from mcp import MCP_Client 
 
-# --- Configuration ---
+# Configuration
 OUTPUT_DIR = "test_results"
 LOG_FILENAME = f"test_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 FLOAT_TOLERANCE = 0.005 # Tolerance for score assertions
 
-# --- Test Case Definitions ---
+# Test Case Definitions
 
 TEST_CASES = [
     {
@@ -85,7 +85,7 @@ TEST_CASES = [
     }
 ]
 
-# --- Test Runner Core Functions ---
+# Test Runner Core Functions
 
 def setup_environment() -> Tuple[RepScoreService, MCP_Client]:
     """Initializes the RepScore Service and MCP Client from a clean state."""
@@ -109,13 +109,13 @@ def run_tests(log_file):
 
     for i, case in enumerate(TEST_CASES):
         
-        # 1. ISOLATION: Reset environment to a clean state for every test case.
+        # 1. Reset environment to a clean state for every test case.
         rep_service, client = setup_environment() 
         
         # Ensure a server_id is available for score retrieval and setup changes
         target_server_id = case.get("server_id", "compute_server_1")
 
-        # 2. SETUP: Apply temporary changes needed for this specific test case.
+        # 2. Apply temporary changes needed for this specific test case.
         if "setup_changes" in case:
             changes = case["setup_changes"]
             
@@ -142,7 +142,7 @@ def run_tests(log_file):
                 data['last_update'] -= sleep_sec 
             log_file.write(f"[INFO] Timestamps advanced for decay check.\n")
 
-        # --- Test Execution ---
+        # Test Execution
         log_file.write(f"\n--- Running Test Case {i+1}: {case['name']} ---\n")
         
         block_count = 0
@@ -203,7 +203,7 @@ def run_tests(log_file):
         log_file.write(f"Notes: {case['notes']}\n")
         log_file.write("-" * 60 + "\n")
 
-# --- Setup and Main Functions ---
+# Setup and Main Functions
 
 def main():
     """Main execution entry point."""
