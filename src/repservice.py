@@ -1,7 +1,6 @@
 import collections
 import time
 from typing import Dict, Any, List
-# Assuming config.py is defined in the project structure
 from config import RepScoreConfig, ServerCatalog, ToolType 
 
 class RepScoreService:
