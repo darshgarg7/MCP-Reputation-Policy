@@ -13,6 +13,16 @@ This turns MCP from a passive context pipe into an **adaptive trust layer**.
 
 ---
 
+<p align="center">
+  <img src="/Users/Darsh/Desktop/Screenshot\ 2025-12-31\ at\ 4.45.14 PM.png" alt="MCP CLI Demo" width="800">
+  <br>
+  <em>Figure 1: The MCP Client executing a goal-conditioned routing policy.</em>
+</p>
+
+* The image above demonstrates the RPL in action: selecting a high-performing image generation server, processing telemetry, and dynamically updating the global reputation state.
+
+---
+
 ## 2. Custom MCP Client
 
 ### Purpose
