@@ -220,5 +220,5 @@ It turns MCP into a **reputation-aware, goal-aligned orchestration layer**
 To run, clone the repo and cd into src. Then, run the command: python3 mcp.py  :)
 
 ```bash
-git clone <your-repo-url> && cd MCP-Reputation-Policy/src && python3 mcp.py
+git clone https://github.com/darshgarg7/MCP-Reputation-Policy.git && cd MCP-Reputation-Policy/src && python3 mcp.py
 ```
