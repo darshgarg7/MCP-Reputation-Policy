@@ -1,3 +1,5 @@
+```mermaid
+
 sequenceDiagram
     participant CLI as User/CLI
     participant Client as MCP Client
@@ -18,6 +20,7 @@ sequenceDiagram
     
     RepService-->>Client: Update Confirmed
     Client-->>CLI: Display Result & Updated Audit Table
+```
 
 
 This code defines a simulated ecosystem for a **Model Context Protocol (MCP)**, which connects AI agents (clients) to tool servers 
