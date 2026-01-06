@@ -8,7 +8,6 @@ class RepScoreService:
     Centralized, trusted service for reputation management (RP Layer).
     Models the distributed architecture: DynamoDB (storage) and Lambda (logic).
     """
-    
     def __init__(self):
         self.server_catalog = ServerCatalog.CATALOG
         self.reputations: Dict[str, Dict[str, Any]] = {}
@@ -28,17 +27,17 @@ class RepScoreService:
                 'history': collections.deque(maxlen=100)
             }
         
-        # Apply custom starting scores for verified or competitive servers
+        # Custom starting scores for verified/competitive servers
         self.reputations["compute_server_1"]['score'] = 0.85
         self.reputations["data_server_2"]['score'] = 0.95
         
         # NEW servers added to the ecosystem (Give them starting scores to be selectable/competitive)
         if "image_fast_4" in self.reputations:
-            self.reputations["image_fast_4"]['score'] = 0.88      # High initial trust
+            self.reputations["image_fast_4"]['score'] = 0.88 # High initial trust
         if "image_cheap_5" in self.reputations:
-            self.reputations["image_cheap_5"]['score'] = 0.65     # Intentionally low trust (will be blocked)
+            self.reputations["image_cheap_5"]['score'] = 0.65 # Intentionally low trust (will be blocked)
         if "semantic_db_6" in self.reputations:
-            self.reputations["semantic_db_6"]['score'] = 0.92     # High initial trust
+            self.reputations["semantic_db_6"]['score'] = 0.92 # High initial trust
 
 
     # --- New Logic: Time-Based Decay ---
@@ -56,13 +55,11 @@ class RepScoreService:
         # Calculate decay factor
         decay_periods = time_elapsed / half_life_seconds
         decay_factor = pow(0.5, decay_periods)
-        
         score_differential = current_rep - RepScoreConfig.DEFAULT_INITIAL_SCORE
         decayed_score = RepScoreConfig.DEFAULT_INITIAL_SCORE + (score_differential * decay_factor)
         
         if decayed_score < current_rep - 0.001:
             print(f"   [DECAY WARNING] {server_id}: Score decayed from {current_rep:.4f} to {decayed_score:.4f}.")
-
         return max(RepScoreConfig.DEFAULT_INITIAL_SCORE, decayed_score)
 
     def get_reputation(self, server_id: str) -> float:
@@ -73,13 +70,11 @@ class RepScoreService:
 
         current_score = rep_data['score']
         last_update = rep_data['last_update']
-        
         decayed_score = self._apply_decay(server_id, current_score, last_update)
         
         if decayed_score < current_score:
             self.reputations[server_id]['score'] = decayed_score
             self.reputations[server_id]['last_update'] = time.time() # Reset update time on read after decay
-
         return decayed_score
 
     # --- Utility for Relative Cost Calculation (Defensive) ---
@@ -145,7 +140,7 @@ class RepScoreService:
             RepScoreConfig.WEIGHT_COST_EFFICIENCY * cost_factor
         )
 
-        # 6. Exponential Moving Average (EMA) Update
+        # Exponential Moving Average (EMA) Update
         new_score = (RepScoreConfig.ALPHA_SMOOTHING * WCS + (1 - RepScoreConfig.ALPHA_SMOOTHING) * current_score)
         return round(max(0.0, min(1.0, new_score)), 4)
 
@@ -158,7 +153,6 @@ class RepScoreService:
 
         current_score = self.get_reputation(server_id)
         new_score = self.calculate_new_score(current_score, log_entry)
-        
         self.reputations[server_id]['score'] = new_score
         self.reputations[server_id]['last_update'] = time.time()
         
