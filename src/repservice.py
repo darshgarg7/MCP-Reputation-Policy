@@ -1,4 +1,4 @@
-import collections
+from datastore import RepDataStore
 import time
 from typing import Dict, Any, List
 from config import RepScoreConfig, ServerCatalog, ToolType 
@@ -10,22 +10,39 @@ class RepScoreService:
     """
     def __init__(self):
         self.server_catalog = ServerCatalog.CATALOG
+        self.store = RepDataStore()  # Initialize the persistence layer
         self.reputations: Dict[str, Dict[str, Any]] = {}
         self._initialize_reputations()
-        print("✅ RepScore Service (Central Trust Fabric) initialized.")
+        print("✅ RepScore Service (Persistent Trust Fabric) initialized.")
+
+    def _hydrate_from_disk(self):
+        for s_id in self.server_catalog:
+            persisted = self.store.get_server_metadata(s_id)
+            if persisted:
+                self.reputations[s_id]['score'] = persisted['score']
+                self.reputations[s_id]['last_update'] = persisted['last_update']
 
     def _initialize_reputations(self):
-        """
-        Sets initial reputation scores and last_update timestamp for ALL servers.
-        This includes custom scores for new, selectable servers.
-        """
         current_time = time.time()
         for s_id in self.server_catalog:
-            self.reputations[s_id] = {
-                'score': RepScoreConfig.DEFAULT_INITIAL_SCORE, 
-                'last_update': current_time,
-                'history': collections.deque(maxlen=100)
-            }
+            # First, try to load from the JSON store
+            persisted = self.store.get_server_metadata(s_id)
+            
+            if persisted:
+                # Load historical state
+                self.reputations[s_id] = {
+                    'score': persisted['score'],
+                    'last_update': persisted['last_update'],
+                    'interaction_count': persisted.get('interaction_count', 0)
+                }
+                print(f"   [Store] Hydrated {s_id}: {persisted['score']}")
+            else:
+                # Fallback to default config
+                self.reputations[s_id] = {
+                    'score': RepScoreConfig.DEFAULT_INITIAL_SCORE, 
+                    'last_update': current_time,
+                    'interaction_count': 0
+                }
         
         # Custom starting scores for verified/competitive servers
         self.reputations["compute_server_1"]['score'] = 0.85
@@ -145,16 +162,21 @@ class RepScoreService:
         return round(max(0.0, min(1.0, new_score)), 4)
 
     def submit_feedback(self, log_entry: Dict[str, Any]):
-        """API endpoint to receive and process telemetry (Pillar 1: Logging & Auditing)."""
         server_id = log_entry['server_id']
-        if server_id not in self.reputations:
-            print(f"   [ERROR] Server {server_id} not found. Skipping update.")
-            return
-
+        
+        # 1. Get current state
         current_score = self.get_reputation(server_id)
+        count = self.reputations[server_id].get('interaction_count', 0) + 1
+        
+        # 2. Compute new score
         new_score = self.calculate_new_score(current_score, log_entry)
+        
+        # 3. Update Memory
         self.reputations[server_id]['score'] = new_score
         self.reputations[server_id]['last_update'] = time.time()
+        self.reputations[server_id]['interaction_count'] = count
         
-        print(f"   [RepScore Update] {server_id}: Score updated from {current_score:.4f} to **{new_score:.4f}**")
+        # 4. CRITICAL: Persist to Disk
+        self.store.update_server_score(server_id, new_score, count)
         
+        print(f"   [RepScore Update] {server_id}: {current_score:.4f} -> **{new_score:.4f}** (Saved)")
