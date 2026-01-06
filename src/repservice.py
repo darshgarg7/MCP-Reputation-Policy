@@ -157,3 +157,4 @@ class RepScoreService:
         self.reputations[server_id]['last_update'] = time.time()
         
         print(f"   [RepScore Update] {server_id}: Score updated from {current_score:.4f} to **{new_score:.4f}**")
+        
