@@ -113,42 +113,41 @@ class RepScoreService:
     def calculate_new_score(self, current_score: float, log_entry: Dict[str, Any]) -> float:
         """
         Calculates the Multi-Factor Reputation Index update (RS).
-        FIXED: Uses RELATIVE Cost Efficiency.
+        Uses normalized unit-cost comparisons and clamped satisfaction scores.
         """
-        outcome, latency, satisfaction, cost_used = (
-            log_entry['outcome_status'], log_entry['latency_sec'], 
-            log_entry['client_satisfaction'], log_entry['compute_cost_units']
-        )
+        outcome = log_entry['outcome_status']
+        latency = log_entry['latency_sec']
+        satisfaction = log_entry['client_satisfaction']
         server_id = log_entry['server_id']
         tool_type = self.server_catalog[server_id]['tool_type']
-        
-        # 1. Calculate Relative Cost Benchmark for this transaction
-        avg_tool_cost = self._get_avg_cost_for_tool(tool_type)
-        
-        # Factor Calculation
+        actual_unit_price = self.server_catalog[server_id]['cost_per_unit']
+        avg_market_unit_price = self._get_avg_cost_for_tool(tool_type)
         reliability_factor = 1.0 if outcome == "SUCCESS" else 0.0
-        latency_penalty = min(1.0, latency / RepScoreConfig.MAX_ACCEPTABLE_LATENCY)
-        latency_factor = 1.0 - latency_penalty
-        
-        # --- RELATIVE Cost Factor (F_C) ---
-        if cost_used <= avg_tool_cost:
-             cost_factor = 1.0 - (cost_used / (2 * avg_tool_cost)) 
+
+        # if latency == benchmark, factor is 0. If latency is 0, factor is 1.
+        latency_ratio = min(1.0, latency / RepScoreConfig.MAX_ACCEPTABLE_LATENCY)
+        latency_factor = 1.0 - latency_ratio
+        # Reward servers that are cheaper than the market average
+        if actual_unit_price <= avg_market_unit_price:
+            # High reward for being cheaper than average
+            cost_factor = 1.0 
         else:
-             # Penalty logic: the greater the difference (cost_used - avg_tool_cost), the higher the penalty
-             cost_factor = max(0.0, 1.0 - ((cost_used - avg_tool_cost) / avg_tool_cost))
-        # ----------------------------------------
+            # Penalty for being more expensive than market average
+            cost_factor = max(0.0, 1.0 - (actual_unit_price - avg_market_unit_price) / avg_market_unit_price)
+
+        # We clamp satisfaction here too just in case it overflowed
+        clamped_satisfaction = max(0.0, min(1.0, satisfaction))
         
-        # Weighted Composite Score (WCS) & EMA Update
-        WCS = max(0.0, min(1.0, (
-            RepScoreConfig.WEIGHT_SATISFACTION * satisfaction + 
+        WCS = (
+            RepScoreConfig.WEIGHT_SATISFACTION * clamped_satisfaction + 
             RepScoreConfig.WEIGHT_RELIABILITY * reliability_factor + 
             RepScoreConfig.WEIGHT_LATENCY_PENALTY * latency_factor +
             RepScoreConfig.WEIGHT_COST_EFFICIENCY * cost_factor
-        )))
-        
+        )
+
+        # 6. Exponential Moving Average (EMA) Update
         new_score = (RepScoreConfig.ALPHA_SMOOTHING * WCS + (1 - RepScoreConfig.ALPHA_SMOOTHING) * current_score)
-        
-        return round(new_score, 4)
+        return round(max(0.0, min(1.0, new_score)), 4)
 
     def submit_feedback(self, log_entry: Dict[str, Any]):
         """API endpoint to receive and process telemetry (Pillar 1: Logging & Auditing)."""
