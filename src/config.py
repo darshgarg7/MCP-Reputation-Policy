@@ -33,7 +33,7 @@ class RepScoreConfig:
     
     # --- Policy Thresholds & Benchmarks (FIXED: Added missing constants) ---
     MIN_REPUTATION_THRESHOLD: Final[float] = 0.70  # Score below which routing is blocked.
-    ALPHA_SMOOTHING: Final[float] = 0.1            # Exponential Moving Average (EMA) factor.
+    ALPHA_SMOOTHING: Final[float] = 0.3            # Exponential Moving Average (EMA) factor.
     MAX_ACCEPTABLE_LATENCY: Final[float] = 0.8     # Latency benchmark (in seconds).
     COST_BENCHMARK: Final[float] = 0.005           # Baseline cost for comparison ($ per unit).
     
