@@ -33,7 +33,8 @@ class RepScoreService:
                 self.reputations[s_id] = {
                     'score': persisted['score'],
                     'last_update': persisted['last_update'],
-                    'interaction_count': persisted.get('interaction_count', 0)
+                    'interaction_count': persisted.get('interaction_count', 0),
+                    'history': persisted.get('history', [persisted['score']])
                 }
                 print(f"   [Store] Hydrated {s_id}: {persisted['score']}")
             else:
@@ -41,20 +42,29 @@ class RepScoreService:
                 self.reputations[s_id] = {
                     'score': RepScoreConfig.DEFAULT_INITIAL_SCORE, 
                     'last_update': current_time,
-                    'interaction_count': 0
+                    'interaction_count': 0,
+                    'history': [RepScoreConfig.DEFAULT_INITIAL_SCORE]
                 }
         
         # Custom starting scores for verified/competitive servers
         self.reputations["compute_server_1"]['score'] = 0.85
+        if len(self.reputations["compute_server_1"].get('history', [])) <= 1:
+             self.reputations["compute_server_1"]['history'] = [0.85]
+             
         self.reputations["data_server_2"]['score'] = 0.95
+        if len(self.reputations["data_server_2"].get('history', [])) <= 1:
+             self.reputations["data_server_2"]['history'] = [0.95]
         
         # NEW servers added to the ecosystem (Give them starting scores to be selectable/competitive)
         if "image_fast_4" in self.reputations:
             self.reputations["image_fast_4"]['score'] = 0.88 # High initial trust
+            if len(self.reputations["image_fast_4"].get('history', [])) <= 1: self.reputations["image_fast_4"]['history'] = [0.88]
         if "image_cheap_5" in self.reputations:
             self.reputations["image_cheap_5"]['score'] = 0.65 # Intentionally low trust (will be blocked)
+            if len(self.reputations["image_cheap_5"].get('history', [])) <= 1: self.reputations["image_cheap_5"]['history'] = [0.65]
         if "semantic_db_6" in self.reputations:
             self.reputations["semantic_db_6"]['score'] = 0.92 # High initial trust
+            if len(self.reputations["semantic_db_6"].get('history', [])) <= 1: self.reputations["semantic_db_6"]['history'] = [0.92]
 
 
     # --- New Logic: Time-Based Decay ---
@@ -176,7 +186,10 @@ class RepScoreService:
         self.reputations[server_id]['last_update'] = time.time()
         self.reputations[server_id]['interaction_count'] = count
         
+        self.reputations[server_id].setdefault('history', []).append(new_score)
+        self.reputations[server_id]['history'] = self.reputations[server_id]['history'][-50:]
+        
         # 4. CRITICAL: Persist to Disk
-        self.store.update_server_score(server_id, new_score, count)
+        self.store.update_server_score(server_id, new_score, count, self.reputations[server_id]['history'])
         
         print(f"   [RepScore Update] {server_id}: {current_score:.4f} -> **{new_score:.4f}** (Saved)")

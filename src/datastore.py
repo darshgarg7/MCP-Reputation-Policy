@@ -21,13 +21,14 @@ class RepDataStore:
         key = f"SERVER#{server_id}"
         return self._data.get(key, {}).get("METADATA")
 
-    def update_server_score(self, server_id: str, new_score: float, count: int):
+    def update_server_score(self, server_id: str, new_score: float, count: int, history: list = None):
         key = f"SERVER#{server_id}"
         if key not in self._data: self._data[key] = {}
         self._data[key]["METADATA"] = {
             'score': round(float(new_score), 4),
             'last_update': time.time(),
-            'interaction_count': count
+            'interaction_count': count,
+            'history': history or [new_score]
         }
         self._save_data()
 
