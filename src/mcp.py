@@ -97,31 +97,26 @@ class MCP_Client:
             'client_satisfaction': satisfaction,
             'server_confidence': response['server_confidence'],
         }
-
+    
     def _select_best_server(self, tool_type: ToolType) -> Optional[str]:
-        """Implements the core Reputation-Based Routing Policy."""
-        candidates = self.rep_service.discover_servers(tool_type)
-        
-        # LLM Policy Interface Output (for observability)
-        print(f"   [LLM Policy] {self._interpret_policy_llm(candidates)}")
+            candidates = self.rep_service.discover_servers(tool_type)
+            if not candidates: return None
 
-        if not candidates: return None
+            # 1. Separate candidates into Trusted and Probationary
+            trusted = [c for c in candidates if c['score'] >= RepScoreConfig.MIN_REPUTATION_THRESHOLD]
+            probation = [c for c in candidates if c['score'] < RepScoreConfig.MIN_REPUTATION_THRESHOLD]
 
-        # Policy Block: Filter out servers below the MIN_REPUTATION_THRESHOLD
-        selectable_servers = [
-            c for c in candidates 
-            if c['score'] >= RepScoreConfig.MIN_REPUTATION_THRESHOLD
-        ]
-        
-        if not selectable_servers:
-            print(f"   ❌ **Policy BLOCK**: All servers failed minimum reputation check.")
-            return None
-        
-        # Select the highest-reputed server
-        best_choice = selectable_servers[0]
-        
-        print(f"   ✅ **Policy SELECT**: Routing to **{best_choice['server_id']}** (Score: {best_choice['score']:.4f}, Cost: ${best_choice['cost']})")
-        return best_choice['server_id']
+            # 2. Redemption Logic: 10% chance to pick a probationary server if it's the best of them
+            if probation and random.random() < 0.10:
+                best_probation = probation[0]
+                print(f"   ⚠️  [RECOVERY PROBE]: Testing blocked server {best_probation['server_id']}")
+                return best_probation['server_id']
+
+            if not trusted:
+                print(f"   ❌ **Policy BLOCK**: No servers meet trust threshold.")
+                return None
+            
+            return trusted[0]['server_id']
 
     def execute_task(self, task_description: str, tool_type: ToolType):
         """The main execution loop: Discover -> Select -> Execute -> Log -> Feedback."""
