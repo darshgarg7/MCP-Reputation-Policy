@@ -1,18 +1,30 @@
 from datastore import RepDataStore
 import time
 import asyncio
-from typing import Dict, Any, List
-from config import RepScoreConfig, ServerCatalog, ToolType 
+from typing import Dict, Any
+from config import RepScoreConfig
 import structlog
 
 logger = structlog.get_logger()
 
+# Default starting scores for each real MCP server
+SERVER_INITIAL_SCORES: Dict[str, float] = {
+    "bloomberg_mcp":        0.95,
+    "legacy_mainframe":     0.65,
+    "public_web_search":    0.88,
+    "reuters_news_api":     0.50,
+    "aws_lambda_compute":   0.85,
+    "internal_research_db": 0.92,
+    "general_reasoning_node": 0.50,
+}
+
 class RepScoreService:
     """
-    Stateless, asynchronous reputation service mimicking AWS Lambda/Flink architecture.
+    Stateless, asynchronous reputation service.
+    Production target: DynamoDB (boto3) + SQS.
+    Local dev: aiosqlite (same interface, zero infra).
     """
     def __init__(self):
-        self.server_catalog = ServerCatalog.CATALOG
         self.store = RepDataStore()
         self.telemetry_queue = asyncio.Queue()
 
@@ -23,24 +35,15 @@ class RepScoreService:
 
     async def _initialize_reputations(self):
         current_time = time.time()
-        for s_id in self.server_catalog:
+        for s_id, default_score in SERVER_INITIAL_SCORES.items():
             persisted = await self.store.get_server_metadata(s_id)
             if not persisted:
-                # Fallback to default
-                score = RepScoreConfig.DEFAULT_INITIAL_SCORE
-                # Custom overrides
-                if s_id == "aws_lambda_compute": score = 0.85
-                if s_id == "bloomberg_mcp": score = 0.95
-                if s_id == "legacy_mainframe": score = 0.65
-                if s_id == "public_web_search": score = 0.88
-                if s_id == "internal_research_db": score = 0.92
-
                 await self.store.update_server_metadata(
                     server_id=s_id,
-                    score=score,
+                    score=default_score,
                     last_update=current_time,
                     interaction_count=0,
-                    history=[score]
+                    history=[default_score],
                 )
 
     async def get_reputation(self, server_id: str) -> float:
