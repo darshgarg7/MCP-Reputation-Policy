@@ -6,10 +6,11 @@ from typing import Dict, Any, Final
 class ToolType(enum.Enum):
     """Defines standard tool functionalities in the Model Context Protocol (MCP) ecosystem."""
     MATH_COMPUTE = "MATH_COMPUTE"
-    DATA_RETRIEVAL = "DATA_RETRIEVAL"
-    REASONING = "REASONING"
-    IMAGE_GEN = "IMAGE_GEN"
-    SEMANTIC_SEARCH = "SEMANTIC_SEARCH"
+    WEB_SEARCH = "WEB_SEARCH"
+    FINANCIAL_DATA = "FINANCIAL_DATA"
+    RESEARCH_DB = "RESEARCH_DB"
+    NEWS_FEED = "NEWS_FEED"
+    GENERAL = "GENERAL"
 
 class Status(enum.Enum):
     """Defines standard status codes for transaction logs."""
@@ -49,19 +50,11 @@ class RepScoreConfig:
 class ServerCatalog:
     """Defines the static, non-reputational metadata for all registered MCP servers."""
     CATALOG: Final[Dict[str, Dict[str, Any]]] = {
-        # Original Servers
-        "compute_server_1": {"tool_type": ToolType.MATH_COMPUTE, "cost_per_unit": 0.005, 'error_rate': 0.15, 'avg_latency': 0.3},
-        "data_server_2": {"tool_type": ToolType.DATA_RETRIEVAL, "cost_per_unit": 0.001, 'error_rate': 0.05, 'avg_latency': 0.2},
-        "low_score_server_3": {"tool_type": ToolType.MATH_COMPUTE, "cost_per_unit": 0.0005, 'error_rate': 0.40, 'avg_latency': 0.1},
-        
-        # New Servers for expanded ecosystem
-        "image_fast_4": { # New Tool: Image Generation (Fast but costly)
-            "tool_type": ToolType.IMAGE_GEN, "cost_per_unit": 0.05, 'error_rate': 0.10, 'avg_latency': 0.5
-        },
-        "image_cheap_5": { # New Tool: Image Generation (Cheap but slow/unreliable)
-            "tool_type": ToolType.IMAGE_GEN, "cost_per_unit": 0.008, 'error_rate': 0.30, 'avg_latency': 1.5
-        },
-        "semantic_db_6": { # New Tool: Semantic Search (High fidelity, low latency)
-            "tool_type": ToolType.SEMANTIC_SEARCH, "cost_per_unit": 0.003, 'error_rate': 0.01, 'avg_latency': 0.15
-        },
+        "aws_lambda_compute": {"tool_type": ToolType.MATH_COMPUTE, "cost_per_unit": 0.005, 'error_rate': 0.05, 'avg_latency': 0.2},
+        "public_web_search": {"tool_type": ToolType.WEB_SEARCH, "cost_per_unit": 0.001, 'error_rate': 0.20, 'avg_latency': 1.2},
+        "bloomberg_mcp": {"tool_type": ToolType.FINANCIAL_DATA, "cost_per_unit": 0.050, 'error_rate': 0.01, 'avg_latency': 0.4},
+        "internal_research_db": {"tool_type": ToolType.RESEARCH_DB, "cost_per_unit": 0.002, 'error_rate': 0.02, 'avg_latency': 0.3},
+        "reuters_news_api": {"tool_type": ToolType.NEWS_FEED, "cost_per_unit": 0.010, 'error_rate': 0.05, 'avg_latency': 0.5},
+        "legacy_mainframe": {"tool_type": ToolType.FINANCIAL_DATA, "cost_per_unit": 0.001, 'error_rate': 0.40, 'avg_latency': 2.5},
+        "general_reasoning_node": {"tool_type": ToolType.GENERAL, "cost_per_unit": 0.020, 'error_rate': 0.10, 'avg_latency': 1.0},
     }
