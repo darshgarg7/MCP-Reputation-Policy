@@ -1,224 +1,109 @@
-# Model Context Protocol Reputation Policy
+# Model Context Protocol (MCP) Reputation Policy Layer
 
-## 1. System Overview
+A **dynamic trust fabric** and **enterprise routing layer** for autonomous AI Agents using the Model Context Protocol (MCP).
 
-The system introduces a **reputation-aware Model Context Protocol (MCP) client** that sits between AI agents and external data sources. Its job is to:
+## The Problem
+As AI agents move from experimental scripts to enterprise-grade autonomous systems, they rely on the **Model Context Protocol (MCP)** to interact with external tools and data sources. Currently, agents **blindly trust** these tools. If a backend database goes down, an API rate-limits, or a tool begins hallucinating, the agent fails catastrophically or enters infinite loops. The industry treats tools as static functions rather than dynamic, volatile infrastructure.
 
-1. Securely broker structured context to agents
-2. Track how well each data source performs over time
-3. Compute a **dynamic reputation score**
-4. Use that score to influence which tools, data sources, or context the agent is allowed to use based on its goals
+## The Solution
+The **MCP Reputation Policy Layer (RPL)** introduces distributed systems concepts—Zero-Trust architecture, Circuit Breaking, and Latency-Based Routing—directly into the Agentic tooling layer. 
 
-This turns MCP from a passive context pipe into an **adaptive trust layer**.
-
----
-
-<p align="center">
-  <img width="1076" height="720" alt="Screenshot 2025-12-31 at 4 45 14 PM" src="https://github.com/user-attachments/assets/32ff05ad-446b-4d40-8807-f93cfb2f19ae" />
-  <br>
-  <em>The MCP Client is executing a goal-conditioned routing policy.</em>
-</p>
-
-* The image above demonstrates the RPL in action: selecting a high-performing image generation server, processing telemetry, and dynamically updating the global reputation state.
+It acts as a middleware "Trust Fabric", constantly monitoring the performance of MCP servers (latency, cost, success rate) and maintaining a dynamic **Reputation Score** using an Exponential Moving Average (EMA). Agents no longer hardcode tool endpoints; instead, they query the RPL with a **Goal Configuration** (e.g., "I need Financial Data. I have low risk tolerance and require high accuracy"), and the RPL dynamically routes the execution to the most reliable, cost-effective server available.
 
 ---
 
-## 2. Custom MCP Client
+## 🏗 System Architecture
 
-### Purpose
+```mermaid
+sequenceDiagram
+    participant UI as React Dashboard
+    participant API as FastAPI Router
+    participant Queue as SQS/EventBridge
+    participant Worker as Background Daemon
+    participant DB as SQLite (DynamoDB)
+    participant LLM as Azure OpenAI
 
-The custom MCP client enforces **policy, trust, and structure** over agent inputs instead of blindly passing context.
-
-### Responsibilities
-
-* Validate and normalize incoming data sources
-* Attach provenance metadata to each context payload
-* Enforce reputation-based inclusion or exclusion
-* Apply agent-specific policies when selecting tools or data
-
-### Key Design Choice
-
-The MCP client is **stateful** with respect to reputation, but **stateless** with respect to agent execution. That means:
-
-* Reputation persists across runs
-* Agent reasoning remains ephemeral
-
----
-
-## 3. Data Persistence Layer (DynamoDB)
-
-### Why DynamoDB
-
-* High write throughput for frequent metric updates
-* Natural fit for time-series style data
-* Cheap, scalable, and simple
-
-### Table Schema (Conceptual)
-
-**Partition Key:** `source_id`
-**Sort Key:** `timestamp`
-
-Each record represents a **single interaction outcome**:
-
-| Field           | Description                           |
-| --------------- | ------------------------------------- |
-| source_id       | Unique identifier for MCP data source |
-| timestamp       | Interaction time                      |
-| success         | Boolean or scalar success indicator   |
-| latency         | Response time                         |
-| relevance_score | Agent-evaluated usefulness            |
-| error_type      | Optional failure classification       |
-
-TTL can be enabled to auto-expire old records beyond a max horizon.
-
----
-
-## 4. Rolling Time Window Reputation Algorithm
-
-### Core Idea
-
-Reputation is **not cumulative**. It is **temporal and adaptive**.
-
-Older behavior matters less. Recent behavior dominates.
-
-This avoids:
-
-* Permanent reputation lock-in
-* One-time failures causing long-term exclusion
-* Adversarial reputation poisoning via early good behavior
-
----
-
-## 5. Mathematical Model
-
-Let:
-
-* ( S ) = a data source
-* ( t ) = current time
-* ( W ) = rolling window duration
-* $$\mathcal{E}_S(t) = \{ \text{interactions from source } S \text{ in } [t - W, t] \}$$
-
-Each interaction $e \in \mathcal{E}_S(t)$ has:
-
-* $q_e \in [0,1]$: quality score (success, relevance, correctness)
-* $$\Delta t_e = t - t_e $$: age of interaction
-
-### Time Decay Weight
-
-Recent events count more:
-
-$$
- w_e = e^{-\lambda \Delta t_e}
-$$
-
-where $\lambda$ controls decay aggressiveness.
-
----
-
-### Reputation Score
-
-$$
-\text{Reputation}(S, t) =
-\frac{\sum_{e \in \mathcal{E}_S(t)} w_e \cdot q_e}
-{\sum_{e \in \mathcal{E}_S(t)} w_e}
-$$
-
-Properties:
-
-* Bounded between 0 and 1
-* Smoothly adapts to changing behavior
-* Robust to sparse data
-
----
-
-## 6. Confidence Adjustment
-
-To avoid over-trusting sparse sources, applied a confidence term:
-
-$$
-\text{FinalScore}(S) = \text{Reputation}(S) \cdot \left(1 - e^{-k|\mathcal{E}_S|}\right)
-$$
-
-This ensures:
-
-* New sources start conservative
-* Trust increases with evidence
-
----
-
-## 7. Agent Goal–Influenced MCP Policy
-
-This is the key differentiator.
-
-The MCP client **does not apply a single global policy**. Instead, it adapts based on **agent intent**.
-
----
-
-### Agent Goal Declaration
-
-Each agent provides a structured goal descriptor, for example:
-
-```json
-{
-  "goal_type": "financial_analysis",
-  "risk_tolerance": "low",
-  "latency_priority": "medium",
-  "accuracy_priority": "high"
-}
+    UI->>API: POST /execute (Goal, ToolType)
+    API->>DB: Fetch reputations
+    Note over API: Select Best Server<br/>(Apply Circuit Breakers)
+    API->>LLM: Execute Simulated Tool
+    LLM-->>API: Result & Reasoning
+    API->>Queue: Push Telemetry Event
+    API-->>UI: Immediate Response (Result)
+    
+    Queue->>Worker: Consume Event
+    Note over Worker: Calculate EMA &<br/>Apply Temporal Decay
+    Worker->>DB: Persist New Score
 ```
 
----
+The project is split into a highly concurrent, AWS-inspired Python backend and an Executive React Dashboard.
 
-### Policy Mapping
+### 1. The Enterprise Python Backend (`/src`)
+The backend is a fully asynchronous, stateless, event-driven engine designed to mimic world-class cloud infrastructure:
 
-The MCP client maps goals to **policy weights**:
+- **High-Concurrency API (`FastAPI`)**: 100% async non-blocking execution path capable of handling thousands of concurrent agent requests.
+- **Stateless Persistence (`aiosqlite`)**: Simulates a Single-Table DynamoDB design. The in-memory state has been stripped out, making the API horizontally scalable.
+- **Event-Driven Telemetry (Background Queues)**: Execution logs are pushed to an `asyncio.Queue` (simulating Amazon SQS). A background Daemon worker processes the queue, calculates the complex EMA math, and writes to the database asynchronously, ensuring the critical API path is never blocked.
+- **Distributed Tracing (`structlog`)**: Every request generates an `X-Request-Id` that flows through the router, queue, and background worker, enabling perfect end-to-end observability.
+- **Real LLM Execution**: Integrated with Azure OpenAI `gpt-4.1`. The backend actually queries the LLM to generate highly realistic, dynamic mock-data based on the chosen server, and generates a human-readable **Reasoning Narrative** explaining *why* the agent chose that specific server based on the user's risk tolerance.
 
-| Goal Dimension    | Effect                           |
-| ----------------- | -------------------------------- |
-| Risk tolerance    | Minimum reputation threshold     |
-| Accuracy priority | Weight on correctness vs latency |
-| Latency priority  | Preference for fast sources      |
-| Task criticality  | Window size and decay rate       |
+### 2. The Executive Dashboard (`/app`)
+A real-time observability dashboard built with **React**, **TailwindCSS**, and **TanStack Query**.
 
----
-
-### Goal-Conditioned Reputation
-
-The base reputation score is reweighted:
-
-$$\text{PolicyScore}(S) = \alpha \cdot \text{Reputation}(S) + \beta \cdot \text{Accuracy}(S) + \gamma \cdot (1 - \text{Latency}(S))$$
-
-Where $\alpha, \beta, \gamma$ are derived from agent goals, not hardcoded.
+- **Goal-Conditioned Routing Sliders**: Users can dynamically adjust the Agent's Risk Tolerance, Latency Priority, and Accuracy Priority.
+- **Real-Time Telemetry**: TanStack Query automatically polls and invalidates cache states, instantly updating the UI's dynamic reputation charts and waterfall logs as the background Python workers process telemetry.
+- **X-Ray Waterfall Logging**: Deep observability into the routing decisions, execution latency, and LLM reasoning.
 
 ---
 
-### Enforcement
+## The Trust Layer Math
 
-The MCP client then:
+The Reputation Policy Layer does not use simple averages. It utilizes a **Multi-Factor Exponential Moving Average (EMA) with Time-Based Decay**.
 
-* Filters sources below a goal-specific threshold
-* Ranks remaining sources by PolicyScore
-* Injects only compliant context into the agent
+When a tool is executed, the backend calculates a `satisfaction_score` based on goal-conditioned weights:
+```python
+satisfaction = (Weight_Success * 1.0) + (Weight_Latency * Latency_Score) + (Weight_Cost * Cost_Score)
+```
 
-The agent never sees rejected sources.
+This is then smoothed into the server's historical reputation to prevent highly-reliable servers from being instantly circuit-broken by a single transient network failure:
+```python
+new_score = (Alpha_Smoothing * satisfaction) + ((1 - Alpha_Smoothing) * decayed_old_score)
+```
+
+If a server drops below the `0.70` threshold, the RPL applies an automatic **Circuit Breaker** and flags the server as `CIRCUIT_BROKEN`, preventing agents from routing critical tasks to it until its reputation recovers.
 
 ---
 
-## 8. Why This Matters
+## 🚀 Getting Started
 
-This system:
+### Prerequisites
+- Python 3.12+
+- Node.js & Bun (for the frontend)
+- Azure OpenAI Credentials
 
-* Prevents low-quality or adversarial context injection
-* Adapts trust dynamically over time
-* Aligns agent behavior with task intent
-* Scales across agents without centralized control logic
+### 1. Setup the Backend
+Navigate to the root directory and create your `.env` file:
+```env
+AZURE_OPENAI_ENDPOINT="https://your-endpoint.openai.azure.com"
+AZURE_OPENAI_API_KEY="your-key"
+AZURE_OPENAI_DEPLOYMENT="gpt-4.1"
+AZURE_OPENAI_API_VERSION="2025-01-01-preview"
+```
 
-It turns MCP into a **reputation-aware, goal-aligned orchestration layer**
-
-## 9. Run Instructions
-
-To run, clone the repo and cd into src. Then, run the command: python3 mcp.py  :)
-
+Install the dependencies and start the asynchronous server:
 ```bash
-git clone https://github.com/darshgarg7/MCP-Reputation-Policy.git && cd MCP-Reputation-Policy/src && python3 mcp.py
+pip install fastapi uvicorn aiosqlite structlog openai python-dotenv pydantic
+cd src
+uvicorn api:app --reload
 ```
+The API will run on `http://localhost:8000` and automatically create the SQLite database on startup.
+
+### 2. Run the Frontend
+In a new terminal, navigate to the Lovable application:
+```bash
+cd app
+npm install
+npm run dev
+```
+
+Open your browser. Adjust the Agent's goals, click "Execute Task", and watch the dynamic trust fabric in action!
