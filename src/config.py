@@ -5,8 +5,13 @@ from typing import Dict, Any, Final
 
 class ToolType(enum.Enum):
     """Defines standard tool functionalities in the Model Context Protocol (MCP) ecosystem."""
+    FINANCIAL_DATA = "FINANCIAL_DATA"
     MATH_COMPUTE = "MATH_COMPUTE"
     DATA_RETRIEVAL = "DATA_RETRIEVAL"
+    WEB_SEARCH = "WEB_SEARCH"
+    NEWS_FEED = "NEWS_FEED"
+    RESEARCH_DB = "RESEARCH_DB"
+    GENERAL = "GENERAL"
     REASONING = "REASONING"
     IMAGE_GEN = "IMAGE_GEN"
     SEMANTIC_SEARCH = "SEMANTIC_SEARCH"

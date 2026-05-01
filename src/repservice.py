@@ -1,3 +1,5 @@
+import asyncio
+from collections import deque
 from datastore import RepDataStore
 import time
 from typing import Dict, Any, List
@@ -12,8 +14,33 @@ class RepScoreService:
         self.server_catalog = ServerCatalog.CATALOG
         self.store = RepDataStore()  # Initialize the persistence layer
         self.reputations: Dict[str, Dict[str, Any]] = {}
+        self.telemetry_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
         self._initialize_reputations()
         print("✅ RepScore Service (Persistent Trust Fabric) initialized.")
+
+    async def initialize(self):
+        """Async startup hook used by the FastAPI app."""
+        return None
+
+    def ensure_servers(self, routes: List[Dict[str, Any]]) -> None:
+        """Seed reputation rows for dynamically discovered MCP server IDs."""
+        current_time = time.time()
+        for route in routes:
+            server_id = route["server_id"]
+            if server_id not in self.reputations:
+                self.reputations[server_id] = {
+                    'score': RepScoreConfig.DEFAULT_INITIAL_SCORE,
+                    'last_update': current_time,
+                    'interaction_count': 0,
+                    'history': deque([RepScoreConfig.DEFAULT_INITIAL_SCORE], maxlen=100),
+                }
+            if server_id not in self.server_catalog:
+                self.server_catalog[server_id] = {
+                    'tool_type': route.get('tool_type'),
+                    'cost_per_unit': route.get('cost_per_unit', RepScoreConfig.COST_BENCHMARK),
+                    'error_rate': 0.0,
+                    'avg_latency': 0.0,
+                }
 
     def _hydrate_from_disk(self):
         for s_id in self.server_catalog:
@@ -33,7 +60,8 @@ class RepScoreService:
                 self.reputations[s_id] = {
                     'score': persisted['score'],
                     'last_update': persisted['last_update'],
-                    'interaction_count': persisted.get('interaction_count', 0)
+                    'interaction_count': persisted.get('interaction_count', 0),
+                    'history': deque([persisted['score']], maxlen=100),
                 }
                 print(f"   [Store] Hydrated {s_id}: {persisted['score']}")
             else:
@@ -41,7 +69,8 @@ class RepScoreService:
                 self.reputations[s_id] = {
                     'score': RepScoreConfig.DEFAULT_INITIAL_SCORE, 
                     'last_update': current_time,
-                    'interaction_count': 0
+                    'interaction_count': 0,
+                    'history': deque([RepScoreConfig.DEFAULT_INITIAL_SCORE], maxlen=100),
                 }
         
         # Custom starting scores for verified/competitive servers
@@ -55,6 +84,9 @@ class RepScoreService:
             self.reputations["image_cheap_5"]['score'] = 0.65 # Intentionally low trust (will be blocked)
         if "semantic_db_6" in self.reputations:
             self.reputations["semantic_db_6"]['score'] = 0.92 # High initial trust
+
+        for rep_data in self.reputations.values():
+            rep_data['history'] = deque([rep_data['score']], maxlen=100)
 
 
     # --- New Logic: Time-Based Decay ---
@@ -93,6 +125,20 @@ class RepScoreService:
             self.reputations[server_id]['score'] = decayed_score
             self.reputations[server_id]['last_update'] = time.time() # Reset update time on read after decay
         return decayed_score
+
+    async def get_all_reputations(self) -> Dict[str, Dict[str, Any]]:
+        """Return a serializable snapshot of all live reputation state."""
+        snapshot: Dict[str, Dict[str, Any]] = {}
+        for server_id, rep_data in self.reputations.items():
+            score = self.get_reputation(server_id)
+            history = rep_data.get('history', deque([score], maxlen=100))
+            snapshot[server_id] = {
+                'score': score,
+                'history': list(history),
+                'interaction_count': rep_data.get('interaction_count', 0),
+                'last_update': rep_data.get('last_update'),
+            }
+        return snapshot
 
     # --- Utility for Relative Cost Calculation (Defensive) ---
 
@@ -163,6 +209,12 @@ class RepScoreService:
 
     def submit_feedback(self, log_entry: Dict[str, Any]):
         server_id = log_entry['server_id']
+        if server_id not in self.reputations:
+            self.ensure_servers([{
+                'server_id': server_id,
+                'tool_type': log_entry.get('tool_type'),
+                'cost_per_unit': RepScoreConfig.COST_BENCHMARK,
+            }])
         
         # 1. Get current state
         current_score = self.get_reputation(server_id)
@@ -175,8 +227,20 @@ class RepScoreService:
         self.reputations[server_id]['score'] = new_score
         self.reputations[server_id]['last_update'] = time.time()
         self.reputations[server_id]['interaction_count'] = count
+        self.reputations[server_id].setdefault('history', deque(maxlen=100)).append(new_score)
         
         # 4. CRITICAL: Persist to Disk
         self.store.update_server_score(server_id, new_score, count)
         
         print(f"   [RepScore Update] {server_id}: {current_score:.4f} -> **{new_score:.4f}** (Saved)")
+
+    async def enqueue_feedback(self, log_entry: Dict[str, Any]) -> None:
+        await self.telemetry_queue.put(log_entry)
+
+    async def process_telemetry_worker(self) -> None:
+        while True:
+            log_entry = await self.telemetry_queue.get()
+            try:
+                self.submit_feedback(log_entry)
+            finally:
+                self.telemetry_queue.task_done()

@@ -1,224 +1,231 @@
-# Model Context Protocol Reputation Policy
+# MCP Reputation Policy Layer
 
-## 1. System Overview
+Reputation-aware routing for real Model Context Protocol (MCP) servers.
 
-The system introduces a **reputation-aware Model Context Protocol (MCP) client** that sits between AI agents and external data sources. Its job is to:
+The API sits between an agent and multiple MCP tool servers. It discovers the
+tools exposed by each server, selects the best route using live reputation
+scores and the agent's risk tolerance, executes the real MCP tool call, records
+telemetry, and updates the trust state over time.
 
-1. Securely broker structured context to agents
-2. Track how well each data source performs over time
-3. Compute a **dynamic reputation score**
-4. Use that score to influence which tools, data sources, or context the agent is allowed to use based on its goals
+## Architecture
 
-This turns MCP from a passive context pipe into an **adaptive trust layer**.
+```mermaid
+flowchart LR
+    Agent["Agent / Frontend"] --> API["FastAPI RPL API<br/>localhost:8000"]
+    API --> Registry["ServerRegistry<br/>tools/list discovery"]
+    API --> Policy["RoutingPolicy<br/>risk-aware selection"]
+    API --> Client["RealMCPClient<br/>Streamable HTTP"]
+    Client --> Financial["Financial MCP<br/>localhost:8001"]
+    Client --> Web["Web + News MCP<br/>localhost:8002"]
+    Client --> Compute["Compute MCP<br/>localhost:8003"]
+    Client --> Research["Research MCP<br/>localhost:8004"]
+    API --> Rep["RepScoreService<br/>EMA + decay + telemetry queue"]
+    Rep --> LocalStore["Local dev: mcp_trust_store.json"]
+    Rep -. "production target" .-> DynamoDB["DynamoDB"]
+    API --> Metrics["Prometheus /metrics"]
+```
 
----
+This is not an in-process simulation path. The production API path uses the MCP
+Python SDK, opens Streamable HTTP sessions to separate MCP server processes, and
+calls tools through JSON-RPC.
 
-<p align="center">
-  <img width="1076" height="720" alt="Screenshot 2025-12-31 at 4 45 14 PM" src="https://github.com/user-attachments/assets/32ff05ad-446b-4d40-8807-f93cfb2f19ae" />
-  <br>
-  <em>The MCP Client is executing a goal-conditioned routing policy.</em>
-</p>
+## Running The System
 
-* The image above demonstrates the RPL in action: selecting a high-performing image generation server, processing telemetry, and dynamically updating the global reputation state.
+Install dependencies and create local environment config:
 
----
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+```
 
-## 2. Custom MCP Client
+Fill in the Azure OpenAI values in `.env`. Then start each process from the repo
+root in a separate terminal:
 
-### Purpose
+```bash
+python -m src.servers.financial_server
+```
 
-The custom MCP client enforces **policy, trust, and structure** over agent inputs instead of blindly passing context.
+```bash
+python -m src.servers.web_server
+```
 
-### Responsibilities
+```bash
+python -m src.servers.compute_server
+```
 
-* Validate and normalize incoming data sources
-* Attach provenance metadata to each context payload
-* Enforce reputation-based inclusion or exclusion
-* Apply agent-specific policies when selecting tools or data
+```bash
+python -m src.servers.research_server
+```
 
-### Key Design Choice
+```bash
+PYTHONPATH=src uvicorn api:app --reload --host 0.0.0.0 --port 8000
+```
 
-The MCP client is **stateful** with respect to reputation, but **stateless** with respect to agent execution. That means:
+Useful endpoints:
 
-* Reputation persists across runs
-* Agent reasoning remains ephemeral
+- `GET http://localhost:8000/api/v1/health`
+- `GET http://localhost:8000/api/v1/servers`
+- `POST http://localhost:8000/api/v1/execute`
+- `GET http://localhost:8000/metrics`
 
----
+Example execution request:
 
-## 3. Data Persistence Layer (DynamoDB)
+```bash
+curl -X POST http://localhost:8000/api/v1/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "What is the current stock price of AAPL?",
+    "tool_type": "FINANCIAL_DATA",
+    "goal": {
+      "goal_type": "trading",
+      "risk_tolerance": "low",
+      "latency_priority": "high",
+      "accuracy_priority": "high"
+    }
+  }'
+```
 
-### Why DynamoDB
+## How The Protocol Works
 
-* High write throughput for frequent metric updates
-* Natural fit for time-series style data
-* Cheap, scalable, and simple
+At startup, the API discovers capabilities from every configured MCP server:
 
-### Table Schema (Conceptual)
+```json
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}
+```
 
-**Partition Key:** `source_id`
-**Sort Key:** `timestamp`
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+```
 
-Each record represents a **single interaction outcome**:
-
-| Field           | Description                           |
-| --------------- | ------------------------------------- |
-| source_id       | Unique identifier for MCP data source |
-| timestamp       | Interaction time                      |
-| success         | Boolean or scalar success indicator   |
-| latency         | Response time                         |
-| relevance_score | Agent-evaluated usefulness            |
-| error_type      | Optional failure classification       |
-
-TTL can be enabled to auto-expire old records beyond a max horizon.
-
----
-
-## 4. Rolling Time Window Reputation Algorithm
-
-### Core Idea
-
-Reputation is **not cumulative**. It is **temporal and adaptive**.
-
-Older behavior matters less. Recent behavior dominates.
-
-This avoids:
-
-* Permanent reputation lock-in
-* One-time failures causing long-term exclusion
-* Adversarial reputation poisoning via early good behavior
-
----
-
-## 5. Mathematical Model
-
-Let:
-
-* ( S ) = a data source
-* ( t ) = current time
-* ( W ) = rolling window duration
-* $$\mathcal{E}_S(t) = \{ \text{interactions from source } S \text{ in } [t - W, t] \}$$
-
-Each interaction $e \in \mathcal{E}_S(t)$ has:
-
-* $q_e \in [0,1]$: quality score (success, relevance, correctness)
-* $$\Delta t_e = t - t_e $$: age of interaction
-
-### Time Decay Weight
-
-Recent events count more:
-
-$$
- w_e = e^{-\lambda \Delta t_e}
-$$
-
-where $\lambda$ controls decay aggressiveness.
-
----
-
-### Reputation Score
-
-$$
-\text{Reputation}(S, t) =
-\frac{\sum_{e \in \mathcal{E}_S(t)} w_e \cdot q_e}
-{\sum_{e \in \mathcal{E}_S(t)} w_e}
-$$
-
-Properties:
-
-* Bounded between 0 and 1
-* Smoothly adapts to changing behavior
-* Robust to sparse data
-
----
-
-## 6. Confidence Adjustment
-
-To avoid over-trusting sparse sources, applied a confidence term:
-
-$$
-\text{FinalScore}(S) = \text{Reputation}(S) \cdot \left(1 - e^{-k|\mathcal{E}_S|}\right)
-$$
-
-This ensures:
-
-* New sources start conservative
-* Trust increases with evidence
-
----
-
-## 7. Agent Goal–Influenced MCP Policy
-
-This is the key differentiator.
-
-The MCP client **does not apply a single global policy**. Instead, it adapts based on **agent intent**.
-
----
-
-### Agent Goal Declaration
-
-Each agent provides a structured goal descriptor, for example:
+At execution time, the RPL selects a route and calls the chosen tool:
 
 ```json
 {
-  "goal_type": "financial_analysis",
-  "risk_tolerance": "low",
-  "latency_priority": "medium",
-  "accuracy_priority": "high"
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "get_financial_data",
+    "arguments": {
+      "query": "What is the current stock price of AAPL?",
+      "source": "bloomberg"
+    }
+  }
 }
 ```
 
----
+The MCP SDK handles the transport details; `RealMCPClient` normalizes the tool
+result into the API contract used by the frontend and the reputation service.
 
-### Policy Mapping
+## Reputation Model
 
-The MCP client maps goals to **policy weights**:
+Each transaction records:
 
-| Goal Dimension    | Effect                           |
-| ----------------- | -------------------------------- |
-| Risk tolerance    | Minimum reputation threshold     |
-| Accuracy priority | Weight on correctness vs latency |
-| Latency priority  | Preference for fast sources      |
-| Task criticality  | Window size and decay rate       |
+- outcome status
+- latency
+- compute cost
+- client satisfaction derived from latency and confidence
+- server confidence
 
----
+The score update is an exponential moving average:
 
-### Goal-Conditioned Reputation
+```text
+new_score = alpha * weighted_current_signal + (1 - alpha) * previous_score
+```
 
-The base reputation score is reweighted:
+Scores also decay toward the default initial trust value when a server has not
+been used recently. Risk tolerance adjusts the active threshold:
 
-$$\text{PolicyScore}(S) = \alpha \cdot \text{Reputation}(S) + \beta \cdot \text{Accuracy}(S) + \gamma \cdot (1 - \text{Latency}(S))$$
+| Risk tolerance | Threshold |
+| --- | ---: |
+| low | 0.85 |
+| medium | 0.70 |
+| high | 0.50 |
 
-Where $\alpha, \beta, \gamma$ are derived from agent goals, not hardcoded.
+If no server meets the threshold, the policy returns the best probationary
+server instead of failing closed. That keeps the demo usable while making the
+circuit-breaker state visible in the API and metrics.
 
----
+## Observability
 
-### Enforcement
+Prometheus metrics are exposed at `GET /metrics`:
 
-The MCP client then:
+- `rpl_requests_total{tool_type,status}`
+- `rpl_routing_latency_seconds{server_id}`
+- `rpl_reputation_score{server_id}`
+- `rpl_circuit_breaker_active{server_id}`
+- `rpl_telemetry_queue_size`
 
-* Filters sources below a goal-specific threshold
-* Ranks remaining sources by PolicyScore
-* Injects only compliant context into the agent
+The API also emits structured JSON logs through `structlog` and attaches an
+`X-Trace-Id` response header to each request.
 
-The agent never sees rejected sources.
+## Configuration And Security
 
----
+Required environment variables:
 
-## 8. Why This Matters
+- `AZURE_OPENAI_API_KEY`
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_DEPLOYMENT`
+- `AZURE_OPENAI_API_VERSION`
 
-This system:
+Local CORS is intentionally narrow by default:
 
-* Prevents low-quality or adversarial context injection
-* Adapts trust dynamically over time
-* Aligns agent behavior with task intent
-* Scales across agents without centralized control logic
+```text
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+```
 
-It turns MCP into a **reputation-aware, goal-aligned orchestration layer**
+For production, set `CORS_ORIGINS` to the deployed frontend origin list. To add
+MCP servers without changing code, configure:
 
-## 9. Run Instructions
+```text
+MCP_SERVER_URLS=https://server-a.example.com,https://server-b.example.com
+```
 
-To run, clone the repo and cd into src. Then, run the command: python3 mcp.py  :)
+The local development persistence layer writes to `mcp_trust_store.json`.
+DynamoDB is the production persistence target for the same reputation metadata
+and telemetry records.
+
+## Project Structure
+
+```text
+.
+|-- README.md
+|-- requirements.txt
+|-- pytest.ini
+|-- src
+|   |-- api.py
+|   |-- config.py
+|   |-- datastore.py
+|   |-- mcp.py
+|   |-- mcp_client.py
+|   |-- metrics.py
+|   |-- repservice.py
+|   |-- rpl
+|   |   |-- __init__.py
+|   |   |-- policy.py
+|   |   `-- registry.py
+|   `-- servers
+|       |-- __init__.py
+|       |-- compute_server.py
+|       |-- financial_server.py
+|       |-- research_server.py
+|       `-- web_server.py
+`-- tests
+    |-- conftest.py
+    |-- test_api.py
+    |-- test_ema_math.py
+    |-- test_mcp_client.py
+    `-- test_routing_policy.py
+```
+
+## Tests
+
+Run the full suite:
 
 ```bash
-git clone https://github.com/darshgarg7/MCP-Reputation-Policy.git && cd MCP-Reputation-Policy/src && python3 mcp.py
+PYTHONPATH=src pytest -q
 ```
+
+Coverage includes reputation math, risk-aware routing, the real MCP transport
+adapter with mocked SDK sessions, FastAPI endpoint contracts, and mocked
+integration execution through the RPL stack.

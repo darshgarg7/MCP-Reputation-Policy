@@ -1,0 +1,6 @@
+.env
+.pytest_cache/
+__pycache__/
+*.pyc
+mcp_trust_store.json
+app/node_modules/
