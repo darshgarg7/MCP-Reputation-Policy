@@ -1,1 +1,1 @@
-# RPL package
+"""Reputation Policy Layer package."""

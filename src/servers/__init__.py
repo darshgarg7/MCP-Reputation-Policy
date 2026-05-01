@@ -1,1 +1,1 @@
-# MCP Tool Servers package
+"""Runnable MCP server processes for local development."""
