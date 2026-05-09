@@ -194,39 +194,6 @@ The local development persistence layer writes to `mcp_trust_store.json`.
 DynamoDB is the production persistence target for the same reputation metadata
 and telemetry records.
 
-## Project Structure
-
-```text
-.
-|-- README.md
-|-- requirements.txt
-|-- pytest.ini
-|-- src
-|   |-- api.py
-|   |-- config.py
-|   |-- datastore.py
-|   |-- mcp.py
-|   |-- mcp_client.py
-|   |-- metrics.py
-|   |-- repservice.py
-|   |-- rpl
-|   |   |-- __init__.py
-|   |   |-- policy.py
-|   |   `-- registry.py
-|   `-- servers
-|       |-- __init__.py
-|       |-- compute_server.py
-|       |-- financial_server.py
-|       |-- research_server.py
-|       `-- web_server.py
-`-- tests
-    |-- conftest.py
-    |-- test_api.py
-    |-- test_ema_math.py
-    |-- test_mcp_client.py
-    `-- test_routing_policy.py
-```
-
 ## Tests
 
 Run the full suite:
