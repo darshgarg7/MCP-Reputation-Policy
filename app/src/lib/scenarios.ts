@@ -9,6 +9,7 @@ export interface ScenarioStep {
   execute?: {
     prompt: string;
     tool_type: ToolType;
+    demo_event?: "POISONED_SOURCE";
   };
   /** Optional goal mutation applied before this step's execute. */
   goalPatch?: Partial<Pick<AgentGoal, "risk_tolerance" | "latency_priority" | "accuracy_priority">>;
@@ -43,14 +44,14 @@ export const SCENARIOS: Scenario[] = [
     blurb:
       "A previously trusted source begins returning low-quality results. Watch the reputation collapse, the circuit breaker trip, and traffic re-route to the failover.",
     durationLabel: "~60s · 8 events",
-    initialGoal: () => goalWith({ risk_tolerance: "low", accuracy_priority: "high", latency_priority: "medium" }),
+    initialGoal: () => goalWith({ risk_tolerance: "medium", accuracy_priority: "high", latency_priority: "medium" }),
     steps: [
       { delayMs: 800, caption: "T+0 · Baseline traffic — primary source serving requests" },
       { delayMs: 1500, caption: "T+1.5 · Routine financial query", execute: { prompt: "Get latest AAPL close price", tool_type: "FINANCIAL_DATA" } },
       { delayMs: 4000, caption: "T+5 · Adversary begins poisoning — satisfaction drops" },
-      { delayMs: 1500, caption: "T+6.5 · Same query, degraded result", execute: { prompt: "Get latest AAPL close price", tool_type: "FINANCIAL_DATA" } },
+      { delayMs: 1500, caption: "T+6.5 · Same query, poisoned result", execute: { prompt: "Get latest AAPL close price", tool_type: "FINANCIAL_DATA", demo_event: "POISONED_SOURCE" } },
       { delayMs: 3500, caption: "T+10 · Reputation crossing trust threshold" },
-      { delayMs: 1500, caption: "T+11.5 · Circuit breaker trips — rerouting", execute: { prompt: "Get latest AAPL close price", tool_type: "FINANCIAL_DATA" } },
+      { delayMs: 1500, caption: "T+11.5 · Second poisoned result trips the route", execute: { prompt: "Get latest AAPL close price", tool_type: "FINANCIAL_DATA", demo_event: "POISONED_SOURCE" } },
       { delayMs: 3000, caption: "T+14.5 · Failover stable on backup source" },
       { delayMs: 1500, caption: "T+16 · Verifying recovery", execute: { prompt: "Get latest AAPL close price", tool_type: "FINANCIAL_DATA" } },
     ],

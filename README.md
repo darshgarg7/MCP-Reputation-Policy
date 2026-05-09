@@ -38,28 +38,37 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fill in the Azure OpenAI values in `.env`. Then start each process from the repo
-root in a separate terminal:
+Fill in the Azure OpenAI values in `.env`.
+
+For the frontend, use Node `>=20.19.0`. If you use `nvm`, the app includes
+`app/.nvmrc`:
 
 ```bash
-python -m src.servers.financial_server
+cd app
+nvm use
+npm install
 ```
 
-```bash
-python -m src.servers.web_server
-```
+Start the backend stack from the repo root:
 
 ```bash
-python -m src.servers.compute_server
+python start_servers.py
 ```
 
-```bash
-python -m src.servers.research_server
-```
+In another terminal, start the API:
 
 ```bash
 PYTHONPATH=src uvicorn api:app --reload --host 0.0.0.0 --port 8000
 ```
+
+In a third terminal, start the frontend:
+
+```bash
+cd app
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+Open `http://127.0.0.1:5173/rpl`.
 
 Useful endpoints:
 
@@ -171,7 +180,7 @@ Required environment variables:
 Local CORS is intentionally narrow by default:
 
 ```text
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000
 ```
 
 For production, set `CORS_ORIGINS` to the deployed frontend origin list. To add

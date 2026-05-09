@@ -12,6 +12,7 @@ import {
   ApiError,
   executeAgent,
   goalToPayload,
+  resetDemoState,
   type ExecuteResponse,
   type ToolType,
 } from "@/lib/api-client";
@@ -44,7 +45,9 @@ export interface RplStore {
   ) => void;
   resetGoal: () => void;
   toggleChartSource: (id: string) => void;
-  executeRequest: (opts?: { prompt?: string; tool_type?: ToolType }) => Promise<{ ok: boolean; reason?: string; response?: ExecuteResponse }>;
+  executeRequest: (opts?: { prompt?: string; tool_type?: ToolType; demo_event?: "POISONED_SOURCE" }) => Promise<{ ok: boolean; reason?: string; response?: ExecuteResponse }>;
+  resetDemo: () => Promise<{ ok: boolean; reason?: string }>;
+  resetPending: boolean;
   clearTelemetry: () => void;
   lastTransactionId: string | null;
 }
@@ -89,10 +92,11 @@ export function useRplStore(): RplStore {
   }, []);
 
   const executeMutation = useMutation({
-    mutationFn: (input: { prompt: string; tool_type: ToolType; goal: AgentGoal }) =>
+    mutationFn: (input: { prompt: string; tool_type: ToolType; goal: AgentGoal; demo_event?: "POISONED_SOURCE" }) =>
       executeAgent({
         prompt: input.prompt,
         tool_type: input.tool_type,
+        demo_event: input.demo_event,
         goal: goalToPayload(input.goal),
       }),
     onSuccess: (response, variables) => {
@@ -104,7 +108,11 @@ export function useRplStore(): RplStore {
         timestamp: Date.now(),
         goal: variables.goal,
         chosen_source_id: response.server_id,
+        tool_type: variables.tool_type,
         policy_score: policy,
+        decision_score: response.decision_score ?? chosen?.base_reputation,
+        risk_threshold: response.risk_threshold,
+        demo_event: variables.demo_event,
         outcome: response.outcome_status === "SUCCESS" ? "SUCCESS" : "ERROR",
         latency_sec: response.latency_sec,
         relevance: response.client_satisfaction,
@@ -123,6 +131,19 @@ export function useRplStore(): RplStore {
     },
   });
 
+  const resetDemoMutation = useMutation({
+    mutationFn: resetDemoState,
+    onSuccess: () => {
+      telemetryStore.clear();
+      setGoal(defaultGoal());
+      setHighlighted(null);
+      setLastTransactionId(null);
+      setSelectedSourceIds([]);
+      seedRef.current = false;
+      queryClient.invalidateQueries({ queryKey: SERVERS_QUERY_KEY });
+    },
+  });
+
   const executeRequest = useCallback<RplStore["executeRequest"]>(
     async (opts) => {
       if (executeMutation.isPending) return { ok: false, reason: "Request already in flight" };
@@ -134,7 +155,7 @@ export function useRplStore(): RplStore {
       const prompt = opts?.prompt ?? `Run a ${tool_type.toLowerCase().replace("_", " ")} task`;
 
       try {
-        const response = await executeMutation.mutateAsync({ prompt, tool_type, goal });
+        const response = await executeMutation.mutateAsync({ prompt, tool_type, goal, demo_event: opts?.demo_event });
         return { ok: true, response };
       } catch (err) {
         const reason = err instanceof ApiError ? err.message : "Unknown execution error";
@@ -143,6 +164,18 @@ export function useRplStore(): RplStore {
     },
     [executeMutation, sources, goal],
   );
+
+  const resetDemo = useCallback<RplStore["resetDemo"]>(async () => {
+    if (resetDemoMutation.isPending) return { ok: false, reason: "Reset already in flight" };
+    try {
+      await resetDemoMutation.mutateAsync();
+      await queryClient.refetchQueries({ queryKey: SERVERS_QUERY_KEY });
+      return { ok: true };
+    } catch (err) {
+      const reason = err instanceof ApiError ? err.message : "Unknown reset error";
+      return { ok: false, reason };
+    }
+  }, [queryClient, resetDemoMutation]);
 
   return useMemo(
     () => ({
@@ -163,6 +196,8 @@ export function useRplStore(): RplStore {
       resetGoal,
       toggleChartSource,
       executeRequest,
+      resetDemo,
+      resetPending: resetDemoMutation.isPending,
       clearTelemetry,
       lastTransactionId,
     }),
@@ -180,6 +215,8 @@ export function useRplStore(): RplStore {
       resetGoal,
       toggleChartSource,
       executeRequest,
+      resetDemo,
+      resetDemoMutation.isPending,
       clearTelemetry,
       lastTransactionId,
       queryClient,

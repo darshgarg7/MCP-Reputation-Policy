@@ -69,7 +69,10 @@ app = FastAPI(
 
 ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
     if origin.strip()
 ]
 
@@ -106,6 +109,7 @@ class AgentRequest(BaseModel):
     prompt: str
     tool_type: str
     goal: AgentGoal
+    demo_event: str | None = None
 
 
 async def startup_event() -> None:
@@ -189,10 +193,13 @@ async def execute_task(req: AgentRequest):
     server_id = route["server_id"]
     server_url = route["url"]
     tool_name = route["tool"]
+    decision_score = rep_scores.get(server_id, RepScoreConfig.DEFAULT_INITIAL_SCORE)
+    risk_threshold = routing_policy._threshold_for(req.goal.risk_tolerance)
     arguments = _build_arguments(tool_name, req.prompt, route.get("tool_kwargs", {}))
 
     with rpl_routing_latency_seconds.labels(server_id=server_id).time():
         response = await mcp_client.call_tool(server_url, tool_name, arguments)
+    response = _apply_demo_event(req.demo_event, response)
 
     status = response.get("status", "ERROR")
     rpl_requests_total.labels(tool_type=req.tool_type, status=status).inc()
@@ -200,7 +207,7 @@ async def execute_task(req: AgentRequest):
     log_entry = mcp_client.create_log_entry(server_id, req.prompt, response)
     log_entry["tool_type"] = req.tool_type
     log_entry["mcp_tool_called"] = tool_name
-    await _maybe_await(rep_service.enqueue_feedback(log_entry))
+    await _maybe_await(rep_service.record_feedback(log_entry))
     rpl_telemetry_queue_size.set(rep_service.telemetry_queue.qsize())
 
     current_rep = await _maybe_await(rep_service.get_reputation(server_id))
@@ -214,8 +221,11 @@ async def execute_task(req: AgentRequest):
         "outcome_status": status,
         "latency_sec": response.get("latency", 0.0),
         "compute_cost": response.get("compute_cost", 0.0),
+        "client_satisfaction": log_entry["client_satisfaction"],
         "result": response.get("result", ""),
         "new_reputation_score": round(float(current_rep), 4),
+        "decision_score": round(float(decision_score), 4),
+        "risk_threshold": round(float(risk_threshold), 4),
         "reasoning": reasoning,
     }
 
@@ -226,7 +236,23 @@ async def health():
         "status": "ok",
         "version": app.version,
         "registry_initialized": server_registry._initialized,
+        "registered_servers": len(server_registry.all_servers()),
+        "mcp_server_count": len({route.get("url") for route in server_registry.all_servers()}),
         "telemetry_queue_depth": rep_service.telemetry_queue.qsize(),
+    }
+
+
+@app.post("/api/v1/demo/reset")
+async def reset_demo_state():
+    routes = server_registry.all_servers()
+    await _maybe_await(rep_service.reset_demo_state(routes))
+    all_reps = await _maybe_await(rep_service.get_all_reputations())
+    update_reputation_gauges(all_reps, RepScoreConfig.MIN_REPUTATION_THRESHOLD)
+    rpl_telemetry_queue_size.set(rep_service.telemetry_queue.qsize())
+    return {
+        "status": "reset",
+        "server_count": len(routes),
+        "mcp_server_count": len({route.get("url") for route in routes}),
     }
 
 
@@ -249,6 +275,19 @@ def _build_arguments(tool_name: str, prompt: str, tool_kwargs: dict[str, Any]) -
     else:
         arguments.setdefault("query", prompt)
     return arguments
+
+
+def _apply_demo_event(demo_event: str | None, response: dict[str, Any]) -> dict[str, Any]:
+    if demo_event != "POISONED_SOURCE":
+        return response
+
+    poisoned = dict(response)
+    poisoned["status"] = "ERROR"
+    poisoned["latency"] = max(float(poisoned.get("latency", 0.0) or 0.0), 1.2)
+    poisoned["compute_cost"] = float(poisoned.get("compute_cost", 0.0) or 0.0)
+    poisoned["server_confidence"] = 0.05
+    poisoned["result"] = "Demo injected poisoning signal: source returned a low-confidence payload."
+    return poisoned
 
 
 async def _generate_reasoning(

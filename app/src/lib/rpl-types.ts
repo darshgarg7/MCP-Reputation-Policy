@@ -49,6 +49,9 @@ export interface DataSource {
   policy_score_backend?: number;
   /** Cost per unit reported by the backend, used by the comparison panel. */
   cost_per_unit?: number;
+  /** MCP endpoint metadata, used by the demo health strip. */
+  mcp_url?: string;
+  mcp_tool?: string;
 }
 
 export type Outcome = "SUCCESS" | "ERROR";
@@ -58,7 +61,11 @@ export interface TelemetryEvent {
   timestamp: number;
   goal: AgentGoal;
   chosen_source_id: string;
+  tool_type?: string;
   policy_score: number;
+  decision_score?: number;
+  risk_threshold?: number;
+  demo_event?: string;
   outcome: Outcome;
   latency_sec: number;
   relevance: number;

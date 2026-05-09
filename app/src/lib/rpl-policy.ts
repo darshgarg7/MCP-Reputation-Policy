@@ -39,6 +39,12 @@ export function computePolicyScore(source: DataSource, w: DerivedWeights) {
   return +Math.max(0, Math.min(1, policy)).toFixed(4);
 }
 
+export function thresholdForRiskTolerance(risk: RiskLevel) {
+  if (risk === "low") return 0.85;
+  if (risk === "high") return 0.5;
+  return 0.7;
+}
+
 /** One decay tick: drift score toward baseline. */
 export function decayScore(current: number, decayRate = 0.015) {
   return REPUTATION_BASELINE + (current - REPUTATION_BASELINE) * Math.exp(-decayRate);

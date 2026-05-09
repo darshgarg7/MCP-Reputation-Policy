@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
@@ -14,8 +15,10 @@ import { AppHeader } from "@/components/rpl/app-header";
 import { AppFooter } from "@/components/rpl/app-footer";
 import { CommandPalette } from "@/components/rpl/command-palette";
 import { ScenarioRunner } from "@/components/rpl/scenario-runner";
+import { DemoControlPanel } from "@/components/rpl/demo-control-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getScenario } from "@/lib/scenarios";
+import { demoHealthQueryOptions } from "@/lib/queries";
 
 interface RplSearch {
   run?: string;
@@ -62,11 +65,15 @@ function RplPage() {
     resetGoal,
     toggleChartSource,
     executeRequest,
+    resetDemo,
+    resetPending,
     clearTelemetry,
     lastTransactionId,
   } = useRplStore();
+  const healthQuery = useQuery(demoHealthQueryOptions());
 
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(search.run ?? null);
+  const [scenarioRunId, setScenarioRunId] = useState(0);
   const activeScenario = activeScenarioId ? getScenario(activeScenarioId) ?? null : null;
 
   // Sync URL ?run= with active scenario.
@@ -111,13 +118,35 @@ function RplPage() {
   }
 
   function startScenario(id: string) {
+    setScenarioRunId((value) => value + 1);
     setActiveScenarioId(id);
     navigate({ to: "/rpl", search: { run: id } as never });
+  }
+
+  async function runPoisonedScenario() {
+    const reset = await resetDemo();
+    if (!reset.ok) {
+      toast.error("Could not reset demo state", { description: reset.reason });
+      return;
+    }
+    clearTelemetry();
+    startScenario("poisoning");
+    toast.success("Running poisoned tool scenario");
   }
 
   function stopScenario() {
     setActiveScenarioId(null);
     navigate({ to: "/rpl", search: {} as never });
+  }
+
+  async function onResetDemo() {
+    const reset = await resetDemo();
+    if (!reset.ok) {
+      toast.error("Could not reset demo state", { description: reset.reason });
+      return;
+    }
+    stopScenario();
+    toast.success("Demo state reset");
   }
 
   return (
@@ -127,6 +156,7 @@ function RplPage() {
 
       {activeScenario && (
         <ScenarioRunner
+          key={`${activeScenario.id}-${scenarioRunId}`}
           scenario={activeScenario}
           setGoal={setGoal}
           executeRequest={(opts) => executeRequest(opts)}
@@ -167,17 +197,19 @@ function RplPage() {
           </div>
         )}
 
-        <div className="grid gap-5 lg:grid-cols-12">
-          <div className="lg:col-span-5 xl:col-span-4">
-            <GoalConfig
-              goal={goal}
-              pending={pending}
-              onChangeField={setGoalField}
-              onReset={resetGoal}
-              onExecute={onExecute}
-            />
-          </div>
-          <div className="lg:col-span-7 xl:col-span-8">
+        <div className="grid gap-5 xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.58fr)] items-stretch">
+          <DemoControlPanel
+            goal={goal}
+            sources={sources}
+            events={events}
+            pending={pending}
+            resetPending={resetPending}
+            health={healthQuery.data}
+            healthLoading={healthQuery.isPending || healthQuery.isFetching}
+            onRunPoisonedScenario={runPoisonedScenario}
+            onResetDemo={onResetDemo}
+          />
+          <div className="min-w-0">
             {isLoadingSources && sources.length === 0 ? (
               <SkeletonPanel label="Telemetry · awaiting backend" />
             ) : (
@@ -192,7 +224,21 @@ function RplPage() {
           </div>
         </div>
 
-        <ComparisonPanel events={events} />
+        <div className="grid gap-5 lg:grid-cols-12 items-start">
+          <div className="lg:col-span-4">
+            <GoalConfig
+              goal={goal}
+              pending={pending}
+              onChangeField={setGoalField}
+              onReset={resetGoal}
+              onExecute={onExecute}
+            />
+          </div>
+          <div className="lg:col-span-8">
+            <ComparisonPanel events={events} />
+          </div>
+        </div>
+
         <CostCalculator events={events} />
 
         {isLoadingSources && sources.length === 0 ? (

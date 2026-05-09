@@ -18,7 +18,7 @@ import signal
 
 SERVERS = [
     {"name": "Financial Server  (bloomberg_mcp, legacy_mainframe)", "module": "servers.financial_server",  "port": 8001},
-    {"name": "Search Server     (public_web_search, reuters_news)", "module": "servers.search_server",     "port": 8002},
+    {"name": "Web/News Server   (public_web_search, reuters_news)", "module": "servers.web_server",        "port": 8002},
     {"name": "Compute Server    (aws_lambda_compute)",               "module": "servers.compute_server",    "port": 8003},
     {"name": "Research Server   (internal_research_db, general)",    "module": "servers.research_server",   "port": 8004},
 ]

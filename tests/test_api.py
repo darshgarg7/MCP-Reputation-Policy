@@ -45,6 +45,7 @@ def mock_patches():
          patch("repservice.RepScoreService.get_all_reputations", new_callable=AsyncMock, return_value=MOCK_REP_DATA), \
          patch("repservice.RepScoreService.get_reputation", new_callable=AsyncMock, return_value=0.95), \
          patch("repservice.RepScoreService.submit_feedback", new_callable=AsyncMock), \
+         patch("repservice.RepScoreService.reset_demo_state", new_callable=AsyncMock), \
          patch("repservice.RepScoreService.process_telemetry_worker", new_callable=AsyncMock), \
          patch("rpl.registry.ServerRegistry.discover", new_callable=AsyncMock), \
          patch("rpl.registry.ServerRegistry.all_servers", return_value=MOCK_REGISTRY_SERVERS), \
@@ -78,6 +79,7 @@ class TestHealthEndpoint:
         data = resp.json()
         assert "status" in data
         assert "version" in data
+        assert "mcp_server_count" in data
         assert data["status"] == "ok"
 
 
@@ -132,7 +134,8 @@ class TestExecuteEndpoint:
         required = {
             "transaction_id", "server_id", "mcp_server_url", "mcp_tool_called",
             "outcome_status", "latency_sec", "compute_cost", "result",
-            "new_reputation_score", "reasoning",
+            "client_satisfaction", "new_reputation_score", "decision_score",
+            "risk_threshold", "reasoning",
         }
         assert required.issubset(data.keys())
 
@@ -166,3 +169,13 @@ class TestExecuteEndpoint:
     async def test_execute_missing_prompt_returns_422(self, async_client):
         resp = await async_client.post("/api/v1/execute", json={"tool_type": "FINANCIAL_DATA"})
         assert resp.status_code == 422
+
+
+class TestDemoResetEndpoint:
+    @pytest.mark.asyncio
+    async def test_demo_reset_returns_seed_summary(self, async_client):
+        resp = await async_client.post("/api/v1/demo/reset")
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["status"] == "reset"
+        assert data["server_count"] == len(MOCK_REGISTRY_SERVERS)

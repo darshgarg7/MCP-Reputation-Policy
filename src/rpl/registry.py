@@ -19,13 +19,62 @@ logger = structlog.get_logger(__name__)
 
 
 DEFAULT_MCP_SERVERS = [
-    {"server_id": "bloomberg_mcp", "url": "http://localhost:8001", "tool_kwargs": {"source": "bloomberg"}},
-    {"server_id": "legacy_mainframe", "url": "http://localhost:8001", "tool_kwargs": {"source": "legacy"}},
-    {"server_id": "public_web_search", "url": "http://localhost:8002", "tool_kwargs": {"source": "public_web"}},
-    {"server_id": "reuters_news_api", "url": "http://localhost:8002", "tool_kwargs": {"source": "reuters"}},
-    {"server_id": "aws_lambda_compute", "url": "http://localhost:8003", "tool_kwargs": {}},
-    {"server_id": "internal_research_db", "url": "http://localhost:8004", "tool_kwargs": {"source": "internal"}},
-    {"server_id": "general_reasoning_node", "url": "http://localhost:8004", "tool_kwargs": {}},
+    {
+        "server_id": "bloomberg_mcp",
+        "url": "http://localhost:8001",
+        "tool": "get_financial_data",
+        "tool_type": ToolType.FINANCIAL_DATA.value,
+        "tool_kwargs": {"source": "bloomberg"},
+        "initial_score": 0.95,
+    },
+    {
+        "server_id": "legacy_mainframe",
+        "url": "http://localhost:8001",
+        "tool": "get_financial_data",
+        "tool_type": ToolType.FINANCIAL_DATA.value,
+        "tool_kwargs": {"source": "legacy"},
+        "initial_score": 0.65,
+    },
+    {
+        "server_id": "public_web_search",
+        "url": "http://localhost:8002",
+        "tool": "search_web",
+        "tool_type": ToolType.WEB_SEARCH.value,
+        "tool_kwargs": {"source": "public_web"},
+        "initial_score": 0.88,
+    },
+    {
+        "server_id": "reuters_news_api",
+        "url": "http://localhost:8002",
+        "tool": "get_news",
+        "tool_type": ToolType.NEWS_FEED.value,
+        "tool_kwargs": {"source": "reuters"},
+        "initial_score": 0.74,
+    },
+    {
+        "server_id": "aws_lambda_compute",
+        "url": "http://localhost:8003",
+        "tool": "execute_computation",
+        "tool_type": ToolType.MATH_COMPUTE.value,
+        "tool_kwargs": {},
+        "initial_score": 0.85,
+    },
+    {
+        "server_id": "internal_research_db",
+        "url": "http://localhost:8004",
+        "tool": "query_research_db",
+        "tool_type": ToolType.RESEARCH_DB.value,
+        "tool_kwargs": {"source": "internal"},
+        "initial_score": 0.92,
+    },
+    {
+        "server_id": "general_reasoning_node",
+        "url": "http://localhost:8004",
+        "tool": "general_reasoning",
+        "tool_type": ToolType.GENERAL.value,
+        "tool_kwargs": {},
+        "initial_score": 0.72,
+    },
 ]
 
 _TOOL_TYPE_HINTS = {
@@ -86,6 +135,27 @@ class ServerRegistry:
             logger.warning("server_probe_failed", server_id=server_id, url=url, error=str(exc))
             return
 
+        if cfg.get("tool"):
+            tool_names = {tool.get("name") for tool in tools}
+            if cfg["tool"] not in tool_names:
+                logger.warning(
+                    "configured_tool_not_found",
+                    server_id=server_id,
+                    url=url,
+                    tool=cfg["tool"],
+                    available=sorted(name for name in tool_names if name),
+                )
+                return
+
+            self._register_route(
+                server_id=server_id,
+                url=url,
+                tool_name=cfg["tool"],
+                tool_type=cfg.get("tool_type"),
+                tool_kwargs=cfg.get("tool_kwargs", {}),
+            )
+            return
+
         for tool in tools:
             tool_name = tool.get("name")
             if not tool_name:
@@ -98,15 +168,41 @@ class ServerRegistry:
             if self._already_registered(tool_type, server_id, tool_name):
                 continue
 
-            self._registry.setdefault(tool_type, []).append(
-                {
-                    "server_id": server_id,
-                    "url": url,
-                    "tool": tool_name,
-                    "tool_kwargs": dict(cfg.get("tool_kwargs", {})),
-                }
+            self._register_route(
+                server_id=server_id,
+                url=url,
+                tool_name=tool_name,
+                tool_type=tool_type,
+                tool_kwargs=cfg.get("tool_kwargs", {}),
             )
-            logger.info("server_discovered", server_id=server_id, tool=tool_name, tool_type=tool_type)
+
+    def _register_route(
+        self,
+        server_id: str,
+        url: str,
+        tool_name: str,
+        tool_type: str | None,
+        tool_kwargs: dict[str, Any],
+    ) -> None:
+        if not tool_type or self._already_registered(tool_type, server_id, tool_name):
+            return
+
+        self._registry.setdefault(tool_type, []).append(
+            {
+                "server_id": server_id,
+                "url": url,
+                "tool": tool_name,
+                "tool_kwargs": dict(tool_kwargs),
+                "initial_score": self._initial_score_for(server_id),
+            }
+        )
+        logger.info("server_discovered", server_id=server_id, tool=tool_name, tool_type=tool_type)
+
+    def _initial_score_for(self, server_id: str) -> float:
+        for cfg in self._configured_servers:
+            if cfg["server_id"] == server_id:
+                return float(cfg.get("initial_score", 0.5))
+        return 0.5
 
     def get_candidates(self, tool_type: str) -> list[dict[str, Any]]:
         if not self._initialized:

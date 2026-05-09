@@ -8,6 +8,8 @@ import type { DataSource, SourceTag, AgentGoal } from "./rpl-types";
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8000/api/v1";
 
+export const API_ROOT_URL = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+
 // ---- Backend wire formats ----------------------------------------------------
 
 export type ToolType =
@@ -27,6 +29,8 @@ export interface ApiServer {
   interactions: number;
   cost_per_unit: number;
   history: number[];
+  mcp_url?: string;
+  mcp_tool?: string;
   // Optional extensions the backend may add later — pass-through.
   last_latency?: number;
   confidence?: number;
@@ -39,6 +43,7 @@ export interface ApiServersResponse {
 export interface ExecuteRequestBody {
   prompt: string;
   tool_type: ToolType;
+  demo_event?: "POISONED_SOURCE";
   goal: {
     goal_type: string;
     risk_tolerance: "low" | "medium" | "high";
@@ -56,8 +61,33 @@ export interface ExecuteResponse {
   client_satisfaction: number;
   result: string;
   new_reputation_score: number;
+  decision_score?: number;
+  risk_threshold?: number;
   // Optional reasoning slot — backend may populate this later.
   reasoning?: string;
+}
+
+export interface ApiHealthResponse {
+  status: "ok" | string;
+  version: string;
+  registry_initialized: boolean;
+  registered_servers: number;
+  mcp_server_count: number;
+  telemetry_queue_depth: number;
+}
+
+export interface DemoHealth {
+  apiOk: boolean;
+  mcpHealthy: number;
+  mcpTotal: number;
+  metricsOk: boolean;
+  detail?: string;
+}
+
+export interface DemoResetResponse {
+  status: "reset";
+  server_count: number;
+  mcp_server_count: number;
 }
 
 // ---- Adapter: ApiServer -> DataSource (existing UI shape) -------------------
@@ -90,6 +120,8 @@ export function normalizeServer(s: ApiServer): DataSource {
     tool_type: s.tool_type,
     cost_per_unit: s.cost_per_unit,
     policy_score_backend: s.policy_score,
+    mcp_url: s.mcp_url,
+    mcp_tool: s.mcp_tool,
   };
 }
 
@@ -193,4 +225,51 @@ export async function executeAgent(body: ExecuteRequestBody): Promise<ExecuteRes
     body: JSON.stringify(body),
     timeoutMs: 30_000,
   });
+}
+
+export async function resetDemoState(): Promise<DemoResetResponse> {
+  return request<DemoResetResponse>("/demo/reset", {
+    method: "POST",
+    timeoutMs: 15_000,
+  });
+}
+
+export async function fetchDemoHealth(): Promise<DemoHealth> {
+  const [api, servers, metrics] = await Promise.allSettled([
+    request<ApiHealthResponse>("/health", { method: "GET", timeoutMs: 5_000 }),
+    request<ApiServersResponse>("/servers", { method: "GET", timeoutMs: 5_000 }),
+    fetchMetrics(),
+  ]);
+
+  const apiOk = api.status === "fulfilled" && api.value.status === "ok";
+  const serverRows = servers.status === "fulfilled" ? servers.value.servers : [];
+  const mcpUrls = new Set(serverRows.map((s) => s.mcp_url).filter(Boolean));
+  const mcpTotal =
+    api.status === "fulfilled" && api.value.mcp_server_count > 0
+      ? api.value.mcp_server_count
+      : Math.max(4, mcpUrls.size);
+  const mcpHealthy = mcpUrls.size;
+  const metricsOk =
+    metrics.status === "fulfilled" &&
+    metrics.value.includes("rpl_requests_total") &&
+    metrics.value.includes("rpl_reputation_score");
+
+  let detail: string | undefined;
+  if (!apiOk && api.status === "rejected") detail = api.reason instanceof Error ? api.reason.message : "API unavailable";
+  else if (servers.status === "rejected") detail = servers.reason instanceof Error ? servers.reason.message : "MCP registry unavailable";
+  else if (metrics.status === "rejected") detail = metrics.reason instanceof Error ? metrics.reason.message : "Metrics unavailable";
+
+  return { apiOk, mcpHealthy, mcpTotal, metricsOk, detail };
+}
+
+async function fetchMetrics(): Promise<string> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 5_000);
+  try {
+    const res = await fetch(`${API_ROOT_URL}/metrics`, { signal: controller.signal });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.text();
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }

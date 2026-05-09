@@ -1,12 +1,16 @@
 import aiosqlite
 import json
+import os
 
 class RepDataStore:
     """
     Asynchronous persistence layer simulating a DynamoDB Single-Table Design.
     """
-    def __init__(self, filename: str = "mcp_trust_store.db"):
-        self.filename = filename
+    def __init__(self, filename: str | None = None):
+        self.filename = filename or os.getenv("RPL_STORE_PATH", ".local/mcp_trust_store.db")
+        dirname = os.path.dirname(self.filename)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
 
     async def initialize(self):
         async with aiosqlite.connect(self.filename) as db:
@@ -81,4 +85,10 @@ class RepDataStore:
                 INSERT INTO telemetry_logs (id, server_id, client_request, response, timestamp)
                 VALUES (?, ?, ?, ?, ?)
             ''', (log_id, server_id, client_request, resp_str, timestamp))
+            await db.commit()
+
+    async def reset_demo_state(self):
+        async with aiosqlite.connect(self.filename) as db:
+            await db.execute('DELETE FROM telemetry_logs')
+            await db.execute('DELETE FROM server_reputation')
             await db.commit()

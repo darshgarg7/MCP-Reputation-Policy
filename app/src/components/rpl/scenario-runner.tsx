@@ -10,7 +10,7 @@ export interface ScenarioRunnerProps {
   /** Apply a goal mutation immediately (e.g. mid-scenario risk change). */
   setGoal: (g: AgentGoal) => void;
   /** Execute one agent request through the real backend. */
-  executeRequest: (opts: { prompt: string; tool_type: ToolType }) => Promise<{ ok: boolean }>;
+  executeRequest: (opts: { prompt: string; tool_type: ToolType; demo_event?: "POISONED_SOURCE" }) => Promise<{ ok: boolean }>;
   onClose: () => void;
 }
 
@@ -72,7 +72,11 @@ export function ScenarioRunner({ scenario, setGoal, executeRequest, onClose }: S
 
       // Execute if specified.
       if (step.execute) {
-        const res = await executeRequest({ prompt: step.execute.prompt, tool_type: step.execute.tool_type });
+        const res = await executeRequest({
+          prompt: step.execute.prompt,
+          tool_type: step.execute.tool_type,
+          demo_event: step.execute.demo_event,
+        });
         setState((s) => ({
           ...s,
           successes: s.successes + (res.ok ? 1 : 0),

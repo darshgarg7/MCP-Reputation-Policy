@@ -20,20 +20,28 @@ class RepScoreService:
 
     async def initialize(self):
         """Async startup hook used by the FastAPI app."""
-        return None
+        await self.store.initialize()
+        await self._hydrate_from_disk()
 
     def ensure_servers(self, routes: List[Dict[str, Any]]) -> None:
         """Seed reputation rows for dynamically discovered MCP server IDs."""
         current_time = time.time()
         for route in routes:
             server_id = route["server_id"]
+            initial_score = float(route.get('initial_score', RepScoreConfig.DEFAULT_INITIAL_SCORE))
             if server_id not in self.reputations:
                 self.reputations[server_id] = {
-                    'score': RepScoreConfig.DEFAULT_INITIAL_SCORE,
+                    'score': initial_score,
                     'last_update': current_time,
                     'interaction_count': 0,
-                    'history': deque([RepScoreConfig.DEFAULT_INITIAL_SCORE], maxlen=100),
+                    'history': deque([initial_score], maxlen=100),
                 }
+            elif route.get('initial_score') is not None and self._should_reset_demo_seed(server_id, current_time):
+                self.reputations[server_id]['score'] = initial_score
+                self.reputations[server_id]['last_update'] = current_time
+                self.reputations[server_id]['interaction_count'] = 0
+                self.reputations[server_id]['history'] = deque([initial_score], maxlen=100)
+
             if server_id not in self.server_catalog:
                 self.server_catalog[server_id] = {
                     'tool_type': route.get('tool_type'),
@@ -42,36 +50,71 @@ class RepScoreService:
                     'avg_latency': 0.0,
                 }
 
-    def _hydrate_from_disk(self):
-        for s_id in self.server_catalog:
-            persisted = self.store.get_server_metadata(s_id)
-            if persisted:
-                self.reputations[s_id]['score'] = persisted['score']
-                self.reputations[s_id]['last_update'] = persisted['last_update']
-
-    def _initialize_reputations(self):
+    async def reset_demo_state(self, routes: List[Dict[str, Any]]) -> None:
+        """Restore dynamically discovered demo servers to their seeded scores."""
+        await self.store.reset_demo_state()
         current_time = time.time()
-        for s_id in self.server_catalog:
-            # First, try to load from the JSON store
-            persisted = self.store.get_server_metadata(s_id)
-            
-            if persisted:
-                # Load historical state
+        for route in routes:
+            server_id = route["server_id"]
+            initial_score = float(route.get('initial_score', RepScoreConfig.DEFAULT_INITIAL_SCORE))
+            self.reputations[server_id] = {
+                'score': initial_score,
+                'last_update': current_time,
+                'interaction_count': 0,
+                'history': deque([initial_score], maxlen=100),
+            }
+            self.server_catalog[server_id] = {
+                'tool_type': route.get('tool_type'),
+                'cost_per_unit': route.get('cost_per_unit', RepScoreConfig.COST_BENCHMARK),
+                'error_rate': 0.0,
+                'avg_latency': 0.0,
+            }
+
+        while not self.telemetry_queue.empty():
+            try:
+                self.telemetry_queue.get_nowait()
+                self.telemetry_queue.task_done()
+            except asyncio.QueueEmpty:
+                break
+
+    def _should_reset_demo_seed(self, server_id: str, current_time: float) -> bool:
+        rep_data = self.reputations[server_id]
+        if rep_data.get('interaction_count', 0) == 0:
+            return True
+
+        half_life_seconds = RepScoreConfig.REPUTATION_DECAY_HALF_LIFE_HOURS * 3600
+        last_update = rep_data.get('last_update', current_time)
+        return current_time - last_update > half_life_seconds
+
+    async def _hydrate_from_disk(self):
+        persisted_rows = await self.store.get_all_server_metadata()
+        for s_id, persisted in persisted_rows.items():
+            if s_id not in self.reputations:
                 self.reputations[s_id] = {
                     'score': persisted['score'],
                     'last_update': persisted['last_update'],
                     'interaction_count': persisted.get('interaction_count', 0),
-                    'history': deque([persisted['score']], maxlen=100),
+                    'history': deque(persisted.get('history', [persisted['score']]), maxlen=100),
                 }
-                print(f"   [Store] Hydrated {s_id}: {persisted['score']}")
-            else:
-                # Fallback to default config
-                self.reputations[s_id] = {
-                    'score': RepScoreConfig.DEFAULT_INITIAL_SCORE, 
-                    'last_update': current_time,
-                    'interaction_count': 0,
-                    'history': deque([RepScoreConfig.DEFAULT_INITIAL_SCORE], maxlen=100),
-                }
+                continue
+
+            self.reputations[s_id]['score'] = persisted['score']
+            self.reputations[s_id]['last_update'] = persisted['last_update']
+            self.reputations[s_id]['interaction_count'] = persisted.get('interaction_count', 0)
+            self.reputations[s_id]['history'] = deque(
+                persisted.get('history', [persisted['score']]),
+                maxlen=100,
+            )
+
+    def _initialize_reputations(self):
+        current_time = time.time()
+        for s_id in self.server_catalog:
+            self.reputations[s_id] = {
+                'score': RepScoreConfig.DEFAULT_INITIAL_SCORE,
+                'last_update': current_time,
+                'interaction_count': 0,
+                'history': deque([RepScoreConfig.DEFAULT_INITIAL_SCORE], maxlen=100),
+            }
         
         # Custom starting scores for verified/competitive servers
         self.reputations["compute_server_1"]['score'] = 0.85
@@ -229,10 +272,14 @@ class RepScoreService:
         self.reputations[server_id]['interaction_count'] = count
         self.reputations[server_id].setdefault('history', deque(maxlen=100)).append(new_score)
         
-        # 4. CRITICAL: Persist to Disk
-        self.store.update_server_score(server_id, new_score, count)
-        
         print(f"   [RepScore Update] {server_id}: {current_score:.4f} -> **{new_score:.4f}** (Saved)")
+
+    async def record_feedback(self, log_entry: Dict[str, Any]) -> None:
+        maybe_result = self.submit_feedback(log_entry)
+        if asyncio.iscoroutine(maybe_result):
+            await maybe_result
+        if log_entry['server_id'] in self.reputations:
+            await self._persist_feedback(log_entry)
 
     async def enqueue_feedback(self, log_entry: Dict[str, Any]) -> None:
         await self.telemetry_queue.put(log_entry)
@@ -242,5 +289,24 @@ class RepScoreService:
             log_entry = await self.telemetry_queue.get()
             try:
                 self.submit_feedback(log_entry)
+                await self._persist_feedback(log_entry)
             finally:
                 self.telemetry_queue.task_done()
+
+    async def _persist_feedback(self, log_entry: Dict[str, Any]) -> None:
+        server_id = log_entry['server_id']
+        rep_data = self.reputations[server_id]
+        await self.store.update_server_metadata(
+            server_id=server_id,
+            score=rep_data['score'],
+            last_update=rep_data['last_update'],
+            interaction_count=rep_data.get('interaction_count', 0),
+            history=list(rep_data.get('history', [])),
+        )
+        await self.store.insert_telemetry(
+            log_id=log_entry.get('id') or log_entry.get('transaction_id'),
+            server_id=server_id,
+            client_request=log_entry.get('client_request', ''),
+            response=log_entry,
+            timestamp=log_entry.get('timestamp', time.time()),
+        )
