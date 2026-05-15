@@ -206,7 +206,7 @@ Coverage includes reputation math, risk-aware routing, the real MCP transport
 adapter with mocked SDK sessions, FastAPI endpoint contracts, and mocked
 integration execution through the RPL stack.
 
-
+## Images of the Demo
 <img width="1469" height="771" alt="Screenshot 2026-05-15 at 12 22 41 AM" src="https://github.com/user-attachments/assets/445daadf-51ff-4a93-8dba-7eb41f481577" />
 <img width="1467" height="755" alt="Screenshot 2026-05-15 at 12 22 29 AM" src="https://github.com/user-attachments/assets/b7d4cbd4-bff1-45a1-a4cc-26061581802d" />
 <img width="1469" height="772" alt="Screenshot 2026-05-15 at 12 21 08 AM" src="https://github.com/user-attachments/assets/3d378954-2fd7-4c41-82fb-7500b1faf02f" />
