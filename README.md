@@ -205,3 +205,12 @@ PYTHONPATH=src pytest -q
 Coverage includes reputation math, risk-aware routing, the real MCP transport
 adapter with mocked SDK sessions, FastAPI endpoint contracts, and mocked
 integration execution through the RPL stack.
+
+
+<img width="1469" height="771" alt="Screenshot 2026-05-15 at 12 22 41 AM" src="https://github.com/user-attachments/assets/445daadf-51ff-4a93-8dba-7eb41f481577" />
+<img width="1467" height="755" alt="Screenshot 2026-05-15 at 12 22 29 AM" src="https://github.com/user-attachments/assets/b7d4cbd4-bff1-45a1-a4cc-26061581802d" />
+<img width="1469" height="772" alt="Screenshot 2026-05-15 at 12 21 08 AM" src="https://github.com/user-attachments/assets/3d378954-2fd7-4c41-82fb-7500b1faf02f" />
+<img width="1476" height="774" alt="Screenshot 2026-05-15 at 12 20 46 AM" src="https://github.com/user-attachments/assets/549564e1-aa7e-4e4a-a963-ea6093070714" />
+<img width="1485" height="774" alt="Screenshot 2026-05-15 at 12 20 01 AM" src="https://github.com/user-attachments/assets/7f86d654-ad25-484d-bed0-a93b35f532bd" />
+
+
